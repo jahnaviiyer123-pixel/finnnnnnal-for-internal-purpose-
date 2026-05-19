@@ -320,8 +320,12 @@ async def _safe_create_index(collection, keys, **kwargs):
 async def _startup():
     try:
         await _safe_create_index(db.users, "email", unique=True)
+        await _safe_create_index(db.users, "role")
         await _safe_create_index(db.students, "id", unique=True)
+        await _safe_create_index(db.students, "status")
         await _safe_create_index(db.classes, [("student_id", 1), ("class_number", 1)], unique=True)
+        await _safe_create_index(db.classes, "status")
+        await _safe_create_index(db.classes, "completed_date")
         await _safe_create_index(db.attendance, [("trainer_id", 1), ("date", 1)], unique=True)
         await _safe_create_index(db.slots, "label", unique=True)
         await seed_admin()
@@ -784,21 +788,28 @@ async def schedule_today(date: Optional[str] = None, user: dict = Depends(get_cu
     # group students by slot
     by_slot = {}
     unassigned = []
-    for s in students:
-        # get next pending class for student
-        next_class = await db.classes.find_one(
+    
+    import asyncio
+    
+    async def fetch_student_data(s):
+        next_class_task = db.classes.find_one(
             {"student_id": s["id"], "status": "pending"},
             {"_id": 0},
             sort=[("class_number", 1)],
         )
-        # get today's class if any
-        today_class = await db.classes.find_one(
+        today_class_task = db.classes.find_one(
             {"student_id": s["id"], "$or": [
                 {"completed_date": day},
                 {"scheduled_date": day},
             ]},
             {"_id": 0},
         )
+        next_class, today_class = await asyncio.gather(next_class_task, today_class_task)
+        return s, next_class, today_class
+
+    results = await asyncio.gather(*(fetch_student_data(s) for s in students))
+
+    for s, next_class, today_class in results:
         student_row = {
             "id": s["id"],
             "name": s["name"],
