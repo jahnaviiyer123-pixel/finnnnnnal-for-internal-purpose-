@@ -26,7 +26,7 @@ const SETTINGS_NAV = [
   { to: "/slots", label: "Slots", Icon: ClockIcon, adminOnly: true },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, setIsOpen }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -36,11 +36,22 @@ export default function Sidebar() {
   };
 
   return (
-    <aside
-      data-testid="sidebar"
-      className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col bg-zinc-50 border-r border-zinc-200 z-40"
-    >
-      <div className="p-6 border-b border-zinc-200">
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-zinc-900/50 z-40 lg:hidden backdrop-blur-sm"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+      
+      <aside
+        data-testid="sidebar"
+        className={`fixed inset-y-0 left-0 w-64 flex flex-col bg-zinc-50 border-r border-zinc-200 z-50 transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
+      >
+        <div className="p-6 border-b border-zinc-200 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-zinc-900 flex items-center justify-center">
             <MotorcycleIcon size={22} weight="bold" className="text-yellow-400" />
@@ -117,5 +128,6 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }
