@@ -228,6 +228,13 @@ class PaymentCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class PaymentUpdate(BaseModel):
+    amount: Optional[float] = None
+    date: Optional[str] = None
+    method: Optional[Literal["cash", "upi", "card", "bank"]] = None
+    notes: Optional[str] = None
+
+
 # ---------- Startup / Seed ----------
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -711,7 +718,8 @@ async def upsert_attendance(body: AttendanceCreate, user: dict = Depends(get_cur
 
 # ---------- Payments ----------
 @api.get("/payments")
-async def list_payments(student_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+async def list_payments(student_id: Optional[str] = None, user: dict = Depends(require_admin)):
+    """Admin only — trainers should not see payment records."""
     q = {}
     if student_id:
         q["student_id"] = student_id
@@ -720,7 +728,8 @@ async def list_payments(student_id: Optional[str] = None, user: dict = Depends(g
 
 
 @api.post("/payments")
-async def create_payment(body: PaymentCreate, user: dict = Depends(get_current_user)):
+async def create_payment(body: PaymentCreate, user: dict = Depends(require_admin)):
+    """Admin only — only admin can record payments."""
     doc = {
         "id": str(uuid.uuid4()),
         "student_id": body.student_id,
@@ -739,6 +748,63 @@ async def create_payment(body: PaymentCreate, user: dict = Depends(get_current_u
     )
     doc.pop("_id", None)
     return doc
+
+
+@api.patch("/payments/{payment_id}")
+async def update_payment(payment_id: str, body: PaymentUpdate, user: dict = Depends(require_admin)):
+    """Admin only — edit an existing payment. Recalculates student fees_paid when amount changes."""
+    existing = await db.payments.find_one({"id": payment_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    updates = {}
+    if body.amount is not None:
+        updates["amount"] = body.amount
+    if body.date is not None:
+        updates["date"] = body.date
+    if body.method is not None:
+        updates["method"] = body.method
+    if body.notes is not None:
+        updates["notes"] = body.notes
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    updates["updated_at"] = _now_iso()
+    updates["updated_by"] = user["id"]
+    await db.payments.update_one({"id": payment_id}, {"$set": updates})
+
+    # If amount changed, recalculate fees_paid on the student
+    if body.amount is not None:
+        old_amount = existing.get("amount", 0)
+        diff = body.amount - old_amount
+        if diff != 0:
+            await db.students.update_one(
+                {"id": existing["student_id"]},
+                {"$inc": {"fees_paid": diff}},
+            )
+
+    return await db.payments.find_one({"id": payment_id}, {"_id": 0})
+
+
+@api.delete("/payments/{payment_id}")
+async def delete_payment(payment_id: str, user: dict = Depends(require_admin)):
+    """Admin only — delete a payment and subtract amount from student fees_paid."""
+    existing = await db.payments.find_one({"id": payment_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    await db.payments.delete_one({"id": payment_id})
+
+    # Subtract the deleted payment from student's fees_paid
+    amount = existing.get("amount", 0)
+    if amount > 0:
+        await db.students.update_one(
+            {"id": existing["student_id"]},
+            {"$inc": {"fees_paid": -amount}},
+        )
+
+    return {"ok": True, "deleted_id": payment_id}
 
 
 

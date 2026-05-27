@@ -6,6 +6,9 @@ import {
   CalendarBlankIcon,
   PlusIcon,
   XIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  FloppyDiskIcon,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -181,6 +184,8 @@ export default function Payments() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   const load = async () => {
     try {
@@ -201,6 +206,38 @@ export default function Payments() {
   const studentName = (id) => students.find((s) => s.id === id)?.name || "Unknown";
   const studentPhone = (id) => students.find((s) => s.id === id)?.phone || "";
   const total = payments.reduce((a, b) => a + (b.amount || 0), 0);
+
+  const startEdit = (p) => {
+    setEditingId(p.id);
+    setEditForm({ amount: p.amount, method: p.method, date: p.date, notes: p.notes || "" });
+  };
+
+  const saveEdit = async (paymentId) => {
+    try {
+      await api.patch(`/payments/${paymentId}`, {
+        amount: Number(editForm.amount),
+        method: editForm.method,
+        date: editForm.date,
+        notes: editForm.notes || undefined,
+      });
+      toast.success("Payment updated");
+      setEditingId(null);
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || e.message);
+    }
+  };
+
+  const deletePayment = async (paymentId, amount, studentName) => {
+    if (!window.confirm(`Delete ₹${amount} payment for ${studentName}? This will reduce their fees paid.`)) return;
+    try {
+      await api.delete(`/payments/${paymentId}`);
+      toast.success("Payment deleted");
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || e.message);
+    }
+  };
 
   // Group payments by month for analysis
   const getMonthlyAnalysis = () => {
@@ -290,37 +327,93 @@ export default function Payments() {
                         <th className="label-tag p-3">Method</th>
                         <th className="label-tag p-3 hidden md:table-cell">Notes</th>
                         <th className="label-tag p-3 text-right">Amount</th>
+                        <th className="label-tag p-3 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {payments.map((p) => (
-                        <tr key={p.id} className="border-b border-zinc-100 hover:bg-zinc-50 transition-colors">
-                          <td className="p-3 font-mono-data text-xs text-zinc-600 whitespace-nowrap">
-                            {p.date}
-                          </td>
-                          <td className="p-3">
-                            <div>
-                              <Link to={`/students/${p.student_id}`} className="font-semibold hover:text-blue-700 transition-colors block text-zinc-950">
-                                {studentName(p.student_id)}
-                              </Link>
-                              <span className="text-[10px] text-zinc-500 font-mono-data block">
-                                {studentPhone(p.student_id)}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <span className="text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 border border-zinc-300 bg-zinc-50">
-                              {p.method}
-                            </span>
-                          </td>
-                          <td className="p-3 text-xs text-zinc-500 hidden md:table-cell max-w-[200px] truncate">
-                            {p.notes || "—"}
-                          </td>
-                          <td className="p-3 text-right font-mono-data font-black text-zinc-950">
-                            ₹{p.amount.toLocaleString("en-IN")}
-                          </td>
-                        </tr>
-                      ))}
+                      {payments.map((p) => {
+                        const isEditing = editingId === p.id;
+                        const sName = studentName(p.student_id);
+                        return (
+                          <tr key={p.id} className="border-b border-zinc-100 hover:bg-zinc-50 transition-colors">
+                            <td className="p-3 font-mono-data text-xs text-zinc-600 whitespace-nowrap">
+                              {isEditing ? (
+                                <input type="date" value={editForm.date}
+                                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                                  className="border border-zinc-300 px-2 py-1 text-xs w-32" />
+                              ) : p.date}
+                            </td>
+                            <td className="p-3">
+                              <div>
+                                <Link to={`/students/${p.student_id}`} className="font-semibold hover:text-blue-700 transition-colors block text-zinc-950">
+                                  {sName}
+                                </Link>
+                                <span className="text-[10px] text-zinc-500 font-mono-data block">
+                                  {studentPhone(p.student_id)}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              {isEditing ? (
+                                <select value={editForm.method}
+                                  onChange={(e) => setEditForm({ ...editForm, method: e.target.value })}
+                                  className="border border-zinc-300 px-2 py-1 text-xs">
+                                  <option value="cash">Cash</option>
+                                  <option value="upi">UPI</option>
+                                  <option value="card">Card</option>
+                                  <option value="bank">Bank</option>
+                                </select>
+                              ) : (
+                                <span className="text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 border border-zinc-300 bg-zinc-50">
+                                  {p.method}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-xs text-zinc-500 hidden md:table-cell max-w-[160px] truncate">
+                              {isEditing ? (
+                                <input value={editForm.notes}
+                                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                                  placeholder="Notes"
+                                  className="border border-zinc-300 px-2 py-1 text-xs w-full" />
+                              ) : p.notes || "—"}
+                            </td>
+                            <td className="p-3 text-right font-mono-data font-black text-zinc-950">
+                              {isEditing ? (
+                                <input type="number" min="1" value={editForm.amount}
+                                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                                  className="border border-zinc-300 px-2 py-1 text-xs w-24 text-right" />
+                              ) : `₹${p.amount.toLocaleString("en-IN")}`}
+                            </td>
+                            <td className="p-3 text-right">
+                              {isEditing ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <button onClick={() => setEditingId(null)}
+                                    className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100">
+                                    Cancel
+                                  </button>
+                                  <button onClick={() => saveEdit(p.id)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-blue-700">
+                                    <FloppyDiskIcon size={10} weight="bold" /> Save
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1">
+                                  <button onClick={() => startEdit(p)}
+                                    title="Edit"
+                                    className="p-1.5 text-zinc-500 hover:bg-zinc-100 border border-zinc-200">
+                                    <PencilSimpleIcon size={12} weight="bold" />
+                                  </button>
+                                  <button onClick={() => deletePayment(p.id, p.amount, sName)}
+                                    title="Delete"
+                                    className="p-1.5 text-zinc-500 hover:bg-red-600 hover:text-white hover:border-red-600 border border-zinc-200">
+                                    <TrashIcon size={12} weight="bold" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -30,19 +30,28 @@ export default function StudentDetail() {
   const [editForm, setEditForm] = useState({});
 
   const load = async () => {
-    const [s, c, t, p, sl] = await Promise.all([
+    const [s, c, t, sl] = await Promise.all([
       api.get(`/students/${id}`),
       api.get(`/students/${id}/classes`),
       api.get("/trainers"),
-      api.get(`/payments?student_id=${id}`),
       api.get("/slots"),
     ]);
     setStudent(s.data);
     setClasses(c.data);
     setTrainers(t.data);
-    setPayments(p.data);
     setSlots(sl.data);
     setEditForm(s.data);
+    // Only admins can fetch payments
+    if (user?.role === "admin") {
+      try {
+        const p = await api.get(`/payments?student_id=${id}`);
+        setPayments(p.data);
+      } catch (_) {
+        setPayments([]);
+      }
+    } else {
+      setPayments([]);
+    }
   };
 
   useEffect(() => {
@@ -327,20 +336,22 @@ export default function StudentDetail() {
           </div>
           <div className="text-xs text-zinc-500 mt-2 font-mono-data">classes completed</div>
 
-          <div className="mt-6 pt-6 border-t border-zinc-200">
-            <div className="label-tag">Fees</div>
-            <div className="flex items-baseline gap-2 mt-2">
-              <div className="font-heading text-3xl font-black tracking-tighter">
-                ₹{(student.fees_paid || 0).toLocaleString("en-IN")}
+          {isAdmin && (
+            <div className="mt-6 pt-6 border-t border-zinc-200">
+              <div className="label-tag">Fees</div>
+              <div className="flex items-baseline gap-2 mt-2">
+                <div className="font-heading text-3xl font-black tracking-tighter">
+                  ₹{(student.fees_paid || 0).toLocaleString("en-IN")}
+                </div>
+                <div className="text-sm text-zinc-500 font-mono-data">/ ₹{(student.fees_total || 0).toLocaleString("en-IN")}</div>
               </div>
-              <div className="text-sm text-zinc-500 font-mono-data">/ ₹{(student.fees_total || 0).toLocaleString("en-IN")}</div>
+              {pending > 0 && (
+                <div className="text-xs text-red-700 font-bold mt-1 font-mono-data">
+                  ₹{pending.toLocaleString("en-IN")} pending
+                </div>
+              )}
             </div>
-            {pending > 0 && (
-              <div className="text-xs text-red-700 font-bold mt-1 font-mono-data">
-                ₹{pending.toLocaleString("en-IN")} pending
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
@@ -380,10 +391,12 @@ export default function StudentDetail() {
         </table>
       </div>
 
-      {/* Payments */}
-      <div className="mt-10">
-        <PaymentSection studentId={id} payments={payments} onReload={load} isAdmin={isAdmin} />
-      </div>
+      {/* Payments — admin only */}
+      {isAdmin && (
+        <div className="mt-10">
+          <PaymentSection studentId={id} payments={payments} onReload={load} isAdmin={isAdmin} />
+        </div>
+      )}
     </div>
   );
 }
@@ -583,6 +596,12 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
 function PaymentSection({ studentId, payments, onReload, isAdmin }) {
   const [form, setForm] = useState({ amount: "", method: "cash", date: new Date().toISOString().slice(0, 10), notes: "" });
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
+  if (!isAdmin) {
+    return null; // Trainers cannot see payment records
+  }
 
   const submit = async (e) => {
     e.preventDefault();
@@ -606,9 +625,41 @@ function PaymentSection({ studentId, payments, onReload, isAdmin }) {
     }
   };
 
+  const startEdit = (p) => {
+    setEditingId(p.id);
+    setEditForm({ amount: p.amount, method: p.method, date: p.date, notes: p.notes || "" });
+  };
+
+  const saveEdit = async (paymentId) => {
+    try {
+      await api.patch(`/payments/${paymentId}`, {
+        amount: Number(editForm.amount),
+        method: editForm.method,
+        date: editForm.date,
+        notes: editForm.notes || undefined,
+      });
+      toast.success("Payment updated");
+      setEditingId(null);
+      onReload();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || e.message);
+    }
+  };
+
+  const deletePayment = async (paymentId, amount) => {
+    if (!window.confirm(`Delete this payment of ₹${amount}? This will reduce the student's fees paid.`)) return;
+    try {
+      await api.delete(`/payments/${paymentId}`);
+      toast.success("Payment deleted");
+      onReload();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || e.message);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div className={`bento p-6 ${isAdmin ? "lg:col-span-2" : "lg:col-span-3"}`}>
+      <div className="bento p-6 lg:col-span-2">
         <div className="label-tag">Ledger</div>
         <h2 className="font-heading text-2xl font-bold tracking-tight mt-1 mb-4">Payments</h2>
         {payments.length === 0 ? (
@@ -623,31 +674,86 @@ function PaymentSection({ studentId, payments, onReload, isAdmin }) {
                 <th className="label-tag p-2 text-left">Method</th>
                 <th className="label-tag p-2 text-left">Notes</th>
                 <th className="label-tag p-2 text-right">Amount</th>
+                <th className="label-tag p-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {payments.map((p) => {
+                const isEditing = editingId === p.id;
                 let formattedDate = p.date;
                 try {
-                  if (p.date) {
+                  if (p.date && !isEditing) {
                     formattedDate = new Date(p.date).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric"
+                      day: "numeric", month: "short", year: "numeric"
                     });
                   }
-                } catch(e) {}
+                } catch(_) {}
                 return (
                   <tr key={p.id} className="border-b border-zinc-100 hover:bg-zinc-50 transition-colors">
-                    <td className="p-2.5 font-mono-data text-xs text-zinc-600">{formattedDate}</td>
-                    <td className="p-2.5">
-                      <span className="text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 border border-zinc-300 bg-zinc-50">
-                        {p.method}
-                      </span>
+                    <td className="p-2.5 font-mono-data text-xs text-zinc-600">
+                      {isEditing ? (
+                        <input type="date" value={editForm.date}
+                          onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                          className="border border-zinc-300 px-2 py-1 text-xs w-32" />
+                      ) : formattedDate}
                     </td>
-                    <td className="p-2.5 text-xs text-zinc-500">{p.notes || "—"}</td>
+                    <td className="p-2.5">
+                      {isEditing ? (
+                        <select value={editForm.method}
+                          onChange={(e) => setEditForm({ ...editForm, method: e.target.value })}
+                          className="border border-zinc-300 px-2 py-1 text-xs">
+                          <option value="cash">Cash</option>
+                          <option value="upi">UPI</option>
+                          <option value="card">Card</option>
+                          <option value="bank">Bank</option>
+                        </select>
+                      ) : (
+                        <span className="text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 border border-zinc-300 bg-zinc-50">
+                          {p.method}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2.5 text-xs text-zinc-500">
+                      {isEditing ? (
+                        <input value={editForm.notes}
+                          onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                          placeholder="Notes"
+                          className="border border-zinc-300 px-2 py-1 text-xs w-full" />
+                      ) : p.notes || "—"}
+                    </td>
                     <td className="p-2.5 text-right font-mono-data font-black text-zinc-950">
-                      ₹{p.amount.toLocaleString("en-IN")}
+                      {isEditing ? (
+                        <input type="number" min="1" value={editForm.amount}
+                          onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                          className="border border-zinc-300 px-2 py-1 text-xs w-24 text-right" />
+                      ) : `₹${p.amount.toLocaleString("en-IN")}`}
+                    </td>
+                    <td className="p-2.5 text-right">
+                      {isEditing ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => setEditingId(null)}
+                            className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100">
+                            Cancel
+                          </button>
+                          <button onClick={() => saveEdit(p.id)}
+                            className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-blue-700">
+                            Save
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => startEdit(p)}
+                            title="Edit payment"
+                            className="p-1.5 text-zinc-500 hover:bg-zinc-100 border border-zinc-200">
+                            <PencilSimpleIcon size={11} weight="bold" />
+                          </button>
+                          <button onClick={() => deletePayment(p.id, p.amount)}
+                            title="Delete payment"
+                            className="p-1.5 text-zinc-500 hover:bg-red-600 hover:text-white hover:border-red-600 border border-zinc-200">
+                            <TrashIcon size={11} weight="bold" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -657,43 +763,41 @@ function PaymentSection({ studentId, payments, onReload, isAdmin }) {
         )}
       </div>
 
-      {isAdmin && (
-        <form onSubmit={submit} className="bento p-6" data-testid="add-payment-form">
-          <div className="label-tag">New</div>
-          <h2 className="font-heading text-2xl font-bold tracking-tight mt-1 mb-4">Add payment</h2>
-          <div className="space-y-3">
-            <div>
-              <div className="label-tag mb-1">Amount (₹)</div>
-              <input type="number" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm" data-testid="payment-amount-input" />
-            </div>
-            <div>
-              <div className="label-tag mb-1">Method</div>
-              <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm">
-                <option value="cash">Cash</option>
-                <option value="upi">UPI</option>
-                <option value="card">Card</option>
-                <option value="bank">Bank</option>
-              </select>
-            </div>
-            <div>
-              <div className="label-tag mb-1">Date</div>
-              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <div className="label-tag mb-1">Notes</div>
-              <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm" />
-            </div>
-            <button
-              type="submit"
-              disabled={saving}
-              data-testid="submit-payment-btn"
-              className="w-full bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-4 py-3 transition-colors disabled:opacity-60"
-            >
-              {saving ? "Saving…" : "Record payment"}
-            </button>
+      <form onSubmit={submit} className="bento p-6" data-testid="add-payment-form">
+        <div className="label-tag">New</div>
+        <h2 className="font-heading text-2xl font-bold tracking-tight mt-1 mb-4">Add payment</h2>
+        <div className="space-y-3">
+          <div>
+            <div className="label-tag mb-1">Amount (₹)</div>
+            <input type="number" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm" data-testid="payment-amount-input" />
           </div>
-        </form>
-      )}
+          <div>
+            <div className="label-tag mb-1">Method</div>
+            <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm">
+              <option value="cash">Cash</option>
+              <option value="upi">UPI</option>
+              <option value="card">Card</option>
+              <option value="bank">Bank</option>
+            </select>
+          </div>
+          <div>
+            <div className="label-tag mb-1">Date</div>
+            <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <div className="label-tag mb-1">Notes</div>
+            <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm" />
+          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            data-testid="submit-payment-btn"
+            className="w-full bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-4 py-3 transition-colors disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Record payment"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -1,19 +1,19 @@
 # Core FastAPI Server Dependencies
-fastapi==0.110.1
-uvicorn==0.25.0
-python-multipart==0.0.20
-python-dotenv==1.2.1
+fastapi
+uvicorn
+python-multipart
+python-dotenv
 
-motor==3.6.0
-pymongo==4.9.1
-certifi==2024.12.14
+motor
+pymongo
+certifi
 
 # Security & Authentication
-bcrypt==4.1.3
-PyJWT==2.12.1
-pydantic==2.12.5
-email-validator==2.3.0
+bcrypt
+PyJWT
+pydantic
+email-validator
 
 # HTTP client & testing
-requests==2.32.5
-pytest==8.4.2
+requests
+pytest
