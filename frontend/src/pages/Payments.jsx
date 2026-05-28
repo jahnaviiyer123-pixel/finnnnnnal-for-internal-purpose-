@@ -2,13 +2,13 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatApiError } from "@/lib/api";
 import {
-  CurrencyInrIcon,
-  CalendarBlankIcon,
-  PlusIcon,
-  XIcon,
-  PencilSimpleIcon,
-  TrashIcon,
-  FloppyDiskIcon,
+  CurrencyInr,
+  CalendarBlank,
+  Plus,
+  X,
+  PencilSimple,
+  Trash,
+  FloppyDisk,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -78,7 +78,7 @@ function RecordPaymentDialog({ open, onClose, students, onCreated }) {
             <h3 className="font-heading text-2xl font-bold tracking-tight mt-1">Record Payment</h3>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-100" data-testid="close-payment-dialog">
-            <XIcon size={18} weight="bold" />
+            <X size={18} weight="bold" />
           </button>
         </div>
         
@@ -285,13 +285,13 @@ export default function Payments() {
             data-testid="record-payment-btn"
             className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3 transition-colors shadow-sm"
           >
-            <PlusIcon size={14} weight="bold" />
+            <Plus size={14} weight="bold" />
             Record Payment
           </button>
           
           <div className="bento p-4 min-w-[200px]">
             <div className="label-tag flex items-center gap-1.5 text-zinc-500">
-              <CurrencyInrIcon size={14} weight="bold" /> Total collected
+              <CurrencyInr size={14} weight="bold" /> Total collected
             </div>
             <div className="font-heading text-3xl font-black tracking-tighter mt-1 text-emerald-800">
               ₹{total.toLocaleString("en-IN")}
@@ -312,7 +312,7 @@ export default function Payments() {
 
             {payments.length === 0 ? (
               <div className="bento p-12 text-center border-dashed border-2 border-zinc-200">
-                <CurrencyInrIcon size={32} className="text-zinc-300 mx-auto mb-3" />
+                <CurrencyInr size={32} className="text-zinc-300 mx-auto mb-3" />
                 <div className="font-semibold text-zinc-700">No payments recorded yet</div>
                 <p className="text-xs text-zinc-500 mt-1">Payments collected during onboarding or student profiles will show up here.</p>
               </div>
@@ -393,7 +393,7 @@ export default function Payments() {
                                   </button>
                                   <button onClick={() => saveEdit(p.id)}
                                     className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-blue-700">
-                                    <FloppyDiskIcon size={10} weight="bold" /> Save
+                                    <FloppyDisk size={10} weight="bold" /> Save
                                   </button>
                                 </div>
                               ) : (
@@ -401,12 +401,12 @@ export default function Payments() {
                                   <button onClick={() => startEdit(p)}
                                     title="Edit"
                                     className="p-1.5 text-zinc-500 hover:bg-zinc-100 border border-zinc-200">
-                                    <PencilSimpleIcon size={12} weight="bold" />
+                                    <PencilSimple size={12} weight="bold" />
                                   </button>
                                   <button onClick={() => deletePayment(p.id, p.amount, sName)}
                                     title="Delete"
                                     className="p-1.5 text-zinc-500 hover:bg-red-600 hover:text-white hover:border-red-600 border border-zinc-200">
-                                    <TrashIcon size={12} weight="bold" />
+                                    <Trash size={12} weight="bold" />
                                   </button>
                                 </div>
                               )}
@@ -425,7 +425,7 @@ export default function Payments() {
           <div className="space-y-6">
             <div className="bento p-5 bg-white shadow-sm border-t-4 border-t-zinc-950">
               <div className="flex items-center gap-2 mb-4">
-                <CalendarBlankIcon size={18} className="text-zinc-600" weight="bold" />
+                <CalendarBlank size={18} className="text-zinc-600" weight="bold" />
                 <span className="label-tag text-sm">Monthly Analysis</span>
               </div>
               <p className="text-xs text-zinc-500 mb-6">Grouping collections and payment methods by month.</p>

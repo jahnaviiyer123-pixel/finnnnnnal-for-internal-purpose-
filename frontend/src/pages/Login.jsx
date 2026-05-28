@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { MotorcycleIcon, ArrowRightIcon } from "@phosphor-icons/react";
+import { Motorcycle, ArrowRight } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const BG = "https://static.prod-images.emergentagent.com/jobs/4c1dca04-8039-4071-823b-fcb736b5e79c/images/783521f8f52360b1d95831b3d4c8135d4818308909f8ac85702a73cdf81e568e.png";
@@ -37,7 +37,7 @@ export default function Login() {
       <div className="flex flex-col justify-between p-8 lg:p-16 bg-white">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-zinc-900 flex items-center justify-center">
-            <MotorcycleIcon size={22} weight="bold" className="text-yellow-400" />
+            <Motorcycle size={22} weight="bold" className="text-yellow-400" />
           </div>
           <div>
             <div className="font-heading font-black text-lg leading-none tracking-tighter">
@@ -100,7 +100,7 @@ export default function Login() {
               className="w-full flex items-center justify-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-6 py-4 transition-colors disabled:opacity-60"
             >
               {loading ? "Authenticating…" : "Enter console"}
-              <ArrowRightIcon size={14} weight="bold" />
+              <ArrowRight size={14} weight="bold" />
             </button>
           </form>
 

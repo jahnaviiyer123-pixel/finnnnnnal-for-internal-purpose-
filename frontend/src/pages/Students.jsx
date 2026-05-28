@@ -3,12 +3,12 @@ import { useAuth } from "@/context/AuthContext";
 import { Link } from "react-router-dom";
 import { api, formatApiError } from "@/lib/api";
 import {
-  PlusIcon,
-  XIcon,
-  MagnifyingGlassIcon,
-  UsersIcon,
-  ArchiveIcon,
-  TrashIcon,
+  Plus,
+  X,
+  MagnifyingGlass,
+  Users,
+  Archive,
+  Trash,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import PhotoUploader from "@/components/PhotoUploader";
@@ -105,7 +105,7 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
             <h3 className="font-heading text-2xl font-bold tracking-tight mt-1">Add Student</h3>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-100" data-testid="close-enroll-dialog">
-            <XIcon size={18} weight="bold" />
+            <X size={18} weight="bold" />
           </button>
         </div>
         <form onSubmit={submit} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -342,7 +342,7 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
                     title="Delete Student"
                     data-testid={`delete-btn-${s.id}`}
                   >
-                    <TrashIcon size={13} weight="bold" />
+                    <Trash size={13} weight="bold" />
                   </button>
                 </td>
               )}
@@ -405,7 +405,7 @@ export default function Students() {
           data-testid="new-student-btn"
           className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3 transition-colors"
         >
-          <PlusIcon size={14} weight="bold" />
+          <Plus size={14} weight="bold" />
           Enroll student
         </button>
       </div>
@@ -421,7 +421,7 @@ export default function Students() {
               : "border-transparent text-zinc-500 hover:text-zinc-900"
           }`}
         >
-          <UsersIcon size={14} weight="bold" /> Active Students
+          <Users size={14} weight="bold" /> Active Students
           <span className="font-mono-data ml-1">({activeStudents.length})</span>
         </button>
         <button
@@ -433,14 +433,14 @@ export default function Students() {
               : "border-transparent text-zinc-500 hover:text-zinc-900"
           }`}
         >
-          <ArchiveIcon size={14} weight="bold" /> Old Students
+          <Archive size={14} weight="bold" /> Old Students
           <span className="font-mono-data ml-1">({oldStudents.length})</span>
         </button>
       </div>
 
       {/* Search */}
       <div className="bento mb-4 p-4 flex items-center gap-3">
-        <MagnifyingGlassIcon size={18} weight="bold" className="text-zinc-400" />
+        <MagnifyingGlass size={18} weight="bold" className="text-zinc-400" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}

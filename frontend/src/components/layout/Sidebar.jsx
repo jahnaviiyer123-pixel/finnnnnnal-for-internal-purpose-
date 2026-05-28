@@ -1,29 +1,29 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  GaugeIcon,
-  UsersIcon,
-  MotorcycleIcon,
-  CalendarCheckIcon,
-  CurrencyInrIcon,
-  ChartLineIcon,
-  SignOutIcon,
-  ClockIcon,
-  CalendarBlankIcon,
+  Gauge,
+  Users,
+  Motorcycle,
+  CalendarCheck,
+  CurrencyInr,
+  ChartLine,
+  SignOut,
+  Clock,
+  CalendarBlank,
 } from "@phosphor-icons/react";
 import { useAuth } from "@/context/AuthContext";
 
 const NAV = [
-  { to: "/dashboard", label: "Dashboard", Icon: GaugeIcon },
-  { to: "/schedule", label: "Schedule", Icon: CalendarBlankIcon },
-  { to: "/students", label: "Students", Icon: UsersIcon },
-  { to: "/trainers", label: "Trainers", Icon: MotorcycleIcon, adminOnly: true },
-  { to: "/attendance", label: "Attendance", Icon: CalendarCheckIcon },
-  { to: "/payments", label: "Payments", Icon: CurrencyInrIcon, adminOnly: true },
+  { to: "/dashboard", label: "Dashboard", Icon: Gauge },
+  { to: "/schedule", label: "Schedule", Icon: CalendarBlank },
+  { to: "/students", label: "Students", Icon: Users },
+  { to: "/trainers", label: "Trainers", Icon: Motorcycle, adminOnly: true },
+  { to: "/attendance", label: "Attendance", Icon: CalendarCheck },
+  { to: "/payments", label: "Payments", Icon: CurrencyInr, adminOnly: true },
 ];
 
 const SETTINGS_NAV = [
-  { to: "/slots", label: "Slots", Icon: ClockIcon, adminOnly: true },
+  { to: "/slots", label: "Slots", Icon: Clock, adminOnly: true },
 ];
 
 export default function Sidebar({ isOpen, setIsOpen }) {
@@ -54,7 +54,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         <div className="p-6 border-b border-zinc-200 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-zinc-900 flex items-center justify-center">
-            <MotorcycleIcon size={22} weight="bold" className="text-yellow-400" />
+            <Motorcycle size={22} weight="bold" className="text-yellow-400" />
           </div>
           <div>
             <div className="font-heading font-black text-lg leading-none tracking-tighter">
@@ -123,7 +123,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           data-testid="logout-btn"
           className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors"
         >
-          <SignOutIcon size={14} weight="bold" />
+          <SignOut size={14} weight="bold" />
           Log out
         </button>
       </div>

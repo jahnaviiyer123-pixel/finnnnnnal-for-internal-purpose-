@@ -3,16 +3,16 @@ import { useParams, Link } from "react-router-dom";
 import { api, formatApiError, API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import {
-  ArrowLeftIcon,
-  UserIcon,
-  PhoneIcon,
-  CalendarBlankIcon,
-  BriefcaseIcon,
-  ClockIcon,
-  CurrencyInrIcon,
-  UsersIcon,
-  FloppyDiskIcon,
-  PencilSimpleIcon,
+  ArrowLeft,
+  User,
+  Phone,
+  CalendarBlank,
+  Briefcase,
+  Clock,
+  CurrencyInr,
+  Users,
+  FloppyDisk,
+  PencilSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -181,7 +181,7 @@ export default function TrainerDetail() {
   return (
     <div className="animate-fadeIn" data-testid="trainer-detail-page">
       <Link to="/trainers" className="inline-flex items-center gap-1 label-tag hover:text-blue-700 mb-6">
-        <ArrowLeftIcon size={12} weight="bold" /> Back to Team
+        <ArrowLeft size={12} weight="bold" /> Back to Team
       </Link>
 
       {/* Roster & Grid Details */}
@@ -195,7 +195,7 @@ export default function TrainerDetail() {
                 {trainer.photo_url ? (
                   <img src={buildPhotoSrc(trainer.photo_url)} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  <UserIcon size={32} weight="bold" className="text-zinc-400" />
+                  <User size={32} weight="bold" className="text-zinc-400" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
@@ -204,7 +204,7 @@ export default function TrainerDetail() {
                   {trainer.name}
                 </h1>
                 <div className="flex items-center gap-2 mt-2 font-mono-data text-xs text-zinc-500">
-                  <PhoneIcon size={12} /> {trainer.phone || "No phone added"}
+                  <Phone size={12} /> {trainer.phone || "No phone added"}
                 </div>
               </div>
             </div>
@@ -223,7 +223,7 @@ export default function TrainerDetail() {
                       onClick={saveDetails}
                       className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-blue-700 transition-colors"
                     >
-                      <FloppyDiskIcon size={12} weight="bold" /> Save
+                      <FloppyDisk size={12} weight="bold" /> Save
                     </button>
                   </div>
                 ) : (
@@ -231,7 +231,7 @@ export default function TrainerDetail() {
                     onClick={() => setEditing(true)}
                     className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100 transition-colors"
                   >
-                    <PencilSimpleIcon size={12} weight="bold" /> Edit Contract
+                    <PencilSimple size={12} weight="bold" /> Edit Contract
                   </button>
                 )}
               </div>
@@ -242,7 +242,7 @@ export default function TrainerDetail() {
             {/* Shift Assignment */}
             <div className="space-y-1">
               <span className="label-tag flex items-center gap-1.5 text-zinc-500">
-                <ClockIcon size={13} /> Shift
+                <Clock size={13} /> Shift
               </span>
               {editing ? (
                 <select
@@ -264,7 +264,7 @@ export default function TrainerDetail() {
             {/* Employment Type */}
             <div className="space-y-1">
               <span className="label-tag flex items-center gap-1.5 text-zinc-500">
-                <BriefcaseIcon size={13} /> Contract Type
+                <Briefcase size={13} /> Contract Type
               </span>
               {editing ? (
                 <select
@@ -285,7 +285,7 @@ export default function TrainerDetail() {
             {/* Base Salary */}
             <div className="space-y-1">
               <span className="label-tag flex items-center gap-1.5 text-zinc-500">
-                <CurrencyInrIcon size={13} /> Base Salary
+                <CurrencyInr size={13} /> Base Salary
               </span>
               {editing ? (
                 <input
@@ -308,7 +308,7 @@ export default function TrainerDetail() {
           <div className="bento p-8 bg-zinc-50 border-t-4 border-t-zinc-950 flex flex-col justify-between">
             <div>
               <div className="label-tag flex items-center gap-1.5 text-zinc-500">
-                <CurrencyInrIcon size={14} weight="bold" /> Payroll Slip
+                <CurrencyInr size={14} weight="bold" /> Payroll Slip
               </div>
               <p className="text-[10px] text-zinc-400 mt-1 uppercase font-bold tracking-wider">
                 Current month projections
@@ -356,7 +356,7 @@ export default function TrainerDetail() {
           <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
             <div>
               <div className="label-tag flex items-center gap-1 text-zinc-500">
-                <CalendarBlankIcon size={13} weight="bold" /> Attendance
+                <CalendarBlank size={13} weight="bold" /> Attendance
               </div>
               <h2 className="font-heading text-2xl font-bold tracking-tight mt-1">Attendance Tracker</h2>
             </div>
@@ -443,7 +443,7 @@ export default function TrainerDetail() {
         <div className="bento p-6 bg-white shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <UsersIcon size={18} className="text-zinc-600" weight="bold" />
+              <Users size={18} className="text-zinc-600" weight="bold" />
               <span className="label-tag text-sm">Assigned Students</span>
             </div>
             <p className="text-xs text-zinc-500 mb-6">Students who train with {trainer.name} for slots and course days.</p>

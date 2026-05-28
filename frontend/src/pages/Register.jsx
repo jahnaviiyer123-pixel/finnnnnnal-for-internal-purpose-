@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link, Navigate } from "react-router-dom";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { MotorcycleIcon, ArrowRightIcon, CheckCircleIcon } from "@phosphor-icons/react";
+import { Motorcycle, ArrowRight, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 export default function Register() {
@@ -38,7 +38,7 @@ export default function Register() {
     <div className="min-h-screen flex flex-col bg-zinc-50">
       <div className="flex items-center gap-3 p-8 lg:p-12">
         <div className="w-10 h-10 bg-zinc-900 flex items-center justify-center">
-          <MotorcycleIcon size={22} weight="bold" className="text-yellow-400" />
+          <Motorcycle size={22} weight="bold" className="text-yellow-400" />
         </div>
         <div>
           <div className="font-heading font-black text-lg leading-none tracking-tighter">
@@ -52,7 +52,7 @@ export default function Register() {
         <div className="w-full max-w-md bg-white border border-zinc-200 p-8" data-testid="register-card">
           {done ? (
             <div className="text-center py-6">
-              <CheckCircleIcon size={48} weight="fill" className="text-emerald-600 mx-auto mb-4" />
+              <CheckCircle size={48} weight="fill" className="text-emerald-600 mx-auto mb-4" />
               <h1 className="font-heading text-3xl font-black tracking-tighter mb-3">
                 Submitted ✓
               </h1>
@@ -65,7 +65,7 @@ export default function Register() {
                 className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3"
                 data-testid="back-to-login-link"
               >
-                Back to login <ArrowRightIcon size={12} weight="bold" />
+                Back to login <ArrowRight size={12} weight="bold" />
               </Link>
             </div>
           ) : (
@@ -139,7 +139,7 @@ export default function Register() {
                   className="w-full flex items-center justify-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-6 py-4 transition-colors disabled:opacity-60"
                 >
                   {loading ? "Submitting…" : "Submit registration"}
-                  <ArrowRightIcon size={14} weight="bold" />
+                  <ArrowRight size={14} weight="bold" />
                 </button>
               </form>
 

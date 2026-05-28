@@ -3,14 +3,14 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { api, formatApiError, API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import {
-  ArrowLeftIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  CircleIcon,
-  PencilSimpleIcon,
-  FloppyDiskIcon,
-  TrashIcon,
-  UserIcon,
+  ArrowLeft,
+  CheckCircle,
+  XCircle,
+  Circle,
+  PencilSimple,
+  FloppyDisk,
+  Trash,
+  User,
 } from "@phosphor-icons/react";
 import PhotoUploader from "@/components/PhotoUploader";
 import { toast } from "sonner";
@@ -105,7 +105,7 @@ export default function StudentDetail() {
   return (
     <div data-testid="student-detail-page">
       <Link to="/students" className="inline-flex items-center gap-1 label-tag hover:text-blue-700 mb-6">
-        <ArrowLeftIcon size={12} weight="bold" /> Back to roster
+        <ArrowLeft size={12} weight="bold" /> Back to roster
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
@@ -150,16 +150,16 @@ export default function StudentDetail() {
                       Cancel
                     </button>
                     <button onClick={saveEdit} data-testid="save-student-btn" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-blue-700">
-                      <FloppyDiskIcon size={12} weight="bold" /> Save
+                      <FloppyDisk size={12} weight="bold" /> Save
                     </button>
                   </>
                 ) : (
                   <>
                     <button onClick={() => setEditing(true)} data-testid="edit-student-btn" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100">
-                      <PencilSimpleIcon size={12} weight="bold" /> Edit
+                      <PencilSimple size={12} weight="bold" /> Edit
                     </button>
                     <button onClick={deleteStudent} data-testid="delete-student-btn" className="p-2 border border-zinc-300 hover:bg-red-600 hover:text-white hover:border-red-600">
-                      <TrashIcon size={14} weight="bold" />
+                      <Trash size={14} weight="bold" />
                     </button>
                   </>
                 )}
@@ -416,7 +416,7 @@ function StudentPhoto({ url, name }) {
         <img src={src} alt="" className="w-full h-full object-cover" />
       ) : (
         <div className="flex flex-col items-center gap-1">
-          <UserIcon size={28} weight="bold" className="text-zinc-400" />
+          <User size={28} weight="bold" className="text-zinc-400" />
           <span className="font-heading text-2xl font-black text-zinc-500">{initial}</span>
         </div>
       )}
@@ -500,11 +500,11 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
 
   const icon =
     cls.status === "completed" ? (
-      <CheckCircleIcon weight="fill" className="text-emerald-600" size={18} />
+      <CheckCircle weight="fill" className="text-emerald-600" size={18} />
     ) : cls.status === "missed" ? (
-      <XCircleIcon weight="fill" className="text-red-600" size={18} />
+      <XCircle weight="fill" className="text-red-600" size={18} />
     ) : (
-      <CircleIcon weight="bold" className="text-zinc-300" size={18} />
+      <Circle weight="bold" className="text-zinc-300" size={18} />
     );
 
   return (
@@ -555,18 +555,18 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
               data-testid={`quick-attended-${cls.class_number}`}
               className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1.5 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
-              <CheckCircleIcon size={10} weight="bold" /> Attended
+              <CheckCircle size={10} weight="bold" /> Attended
             </button>
             <button
               onClick={() => quickMark("missed")}
               data-testid={`quick-missed-${cls.class_number}`}
               className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1.5 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
-              <XCircleIcon size={10} weight="bold" /> Missed
+              <XCircle size={10} weight="bold" /> Missed
             </button>
             {isAdmin && (
               <button onClick={() => setEditing(true)} data-testid={`edit-class-${cls.class_number}`} className="p-1.5 hover:bg-zinc-100 text-zinc-500 border border-zinc-200">
-                <PencilSimpleIcon size={11} weight="bold" />
+                <PencilSimple size={11} weight="bold" />
               </button>
             )}
           </div>
@@ -581,7 +581,7 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
               </div>
             ) : (
               <button onClick={() => setEditing(true)} data-testid={`edit-class-${cls.class_number}`} className="p-1.5 hover:bg-zinc-100">
-                <PencilSimpleIcon size={14} weight="bold" />
+                <PencilSimple size={14} weight="bold" />
               </button>
             )
           ) : (
@@ -745,12 +745,12 @@ function PaymentSection({ studentId, payments, onReload, isAdmin }) {
                           <button onClick={() => startEdit(p)}
                             title="Edit payment"
                             className="p-1.5 text-zinc-500 hover:bg-zinc-100 border border-zinc-200">
-                            <PencilSimpleIcon size={11} weight="bold" />
+                            <PencilSimple size={11} weight="bold" />
                           </button>
                           <button onClick={() => deletePayment(p.id, p.amount)}
                             title="Delete payment"
                             className="p-1.5 text-zinc-500 hover:bg-red-600 hover:text-white hover:border-red-600 border border-zinc-200">
-                            <TrashIcon size={11} weight="bold" />
+                            <Trash size={11} weight="bold" />
                           </button>
                         </div>
                       )}

@@ -3,15 +3,15 @@ import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Link } from "react-router-dom";
 import {
-  CheckCircleIcon,
-  XCircleIcon,
-  AirplaneTiltIcon,
-  UsersIcon,
-  MotorcycleIcon,
-  MagnifyingGlassIcon,
-  ClockIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
+  CheckCircle,
+  XCircle,
+  AirplaneTilt,
+  Users,
+  Motorcycle,
+  MagnifyingGlass,
+  Clock,
+  CaretLeft,
+  CaretRight,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -42,7 +42,7 @@ export default function Attendance() {
               : "border-transparent text-zinc-500 hover:text-zinc-900"
           }`}
         >
-          <UsersIcon size={14} weight="bold" /> Student Attendance
+          <Users size={14} weight="bold" /> Student Attendance
         </button>
         {isAdmin && (
           <button
@@ -54,7 +54,7 @@ export default function Attendance() {
                 : "border-transparent text-zinc-500 hover:text-zinc-900"
             }`}
           >
-            <MotorcycleIcon size={14} weight="bold" /> Trainer Attendance
+            <Motorcycle size={14} weight="bold" /> Trainer Attendance
           </button>
         )}
       </div>
@@ -186,7 +186,7 @@ function StudentAttendance({ user, isAdmin }) {
             className="p-2 border border-zinc-300 hover:bg-zinc-100 transition-colors"
             data-testid="date-prev"
           >
-            <CaretLeftIcon size={14} weight="bold" />
+            <CaretLeft size={14} weight="bold" />
           </button>
           <input
             type="date"
@@ -200,13 +200,13 @@ function StudentAttendance({ user, isAdmin }) {
             className="p-2 border border-zinc-300 hover:bg-zinc-100 transition-colors"
             data-testid="date-next"
           >
-            <CaretRightIcon size={14} weight="bold" />
+            <CaretRight size={14} weight="bold" />
           </button>
         </div>
 
         {/* Search */}
         <div className="flex items-center gap-2 flex-1 min-w-[200px] border border-zinc-300 px-3 py-2">
-          <MagnifyingGlassIcon size={16} className="text-zinc-400" />
+          <MagnifyingGlass size={16} className="text-zinc-400" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -254,7 +254,7 @@ function StudentAttendance({ user, isAdmin }) {
       {/* Student Attendance Grid */}
       {filtered.length === 0 ? (
         <div className="bento p-12 text-center border-dashed border-2 border-zinc-200 bg-zinc-50/50">
-          <UsersIcon size={32} className="text-zinc-300 mx-auto mb-3" />
+          <Users size={32} className="text-zinc-300 mx-auto mb-3" />
           <div className="font-semibold text-zinc-700">No active students found</div>
           <p className="text-xs text-zinc-500 mt-1">
             {!isAdmin
@@ -311,7 +311,7 @@ function StudentAttendance({ user, isAdmin }) {
                     <td className="p-3 hidden md:table-cell">
                       {s.slot_time ? (
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-zinc-100 border border-zinc-200 uppercase tracking-wider font-bold">
-                          <ClockIcon size={10} weight="bold" /> {s.slot_time}
+                          <Clock size={10} weight="bold" /> {s.slot_time}
                         </span>
                       ) : (
                         <span className="text-xs text-zinc-400">—</span>
@@ -366,7 +366,7 @@ function StudentAttendance({ user, isAdmin }) {
                               data-testid={`mark-attended-${s.id}`}
                               className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
                             >
-                              <CheckCircleIcon size={12} weight="bold" />{" "}
+                              <CheckCircle size={12} weight="bold" />{" "}
                               Attended
                             </button>
                             <button
@@ -381,7 +381,7 @@ function StudentAttendance({ user, isAdmin }) {
                               data-testid={`mark-missed-${s.id}`}
                               className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
                             >
-                              <XCircleIcon size={12} weight="bold" /> Missed
+                              <XCircle size={12} weight="bold" /> Missed
                             </button>
                             <span className="text-[9px] text-zinc-400 font-mono-data whitespace-nowrap">
                               Class {nextPending.class_number}
@@ -489,7 +489,7 @@ function TrainerAttendance() {
             onClick={() => goDate(-1)}
             className="p-2 border border-zinc-300 hover:bg-zinc-100 transition-colors"
           >
-            <CaretLeftIcon size={14} weight="bold" />
+            <CaretLeft size={14} weight="bold" />
           </button>
           <input
             type="date"
@@ -502,7 +502,7 @@ function TrainerAttendance() {
             onClick={() => goDate(1)}
             className="p-2 border border-zinc-300 hover:bg-zinc-100 transition-colors"
           >
-            <CaretRightIcon size={14} weight="bold" />
+            <CaretRight size={14} weight="bold" />
           </button>
         </div>
         <div className="bento p-4 flex items-center gap-4 justify-between flex-wrap">
@@ -540,7 +540,7 @@ function TrainerAttendance() {
               className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2 transition-colors"
               data-testid="mark-all-present"
             >
-              <CheckCircleIcon size={12} weight="bold" /> Mark all present
+              <CheckCircle size={12} weight="bold" /> Mark all present
             </button>
           )}
         </div>
@@ -581,7 +581,7 @@ function TrainerAttendance() {
                             "bg-emerald-600 border-emerald-700 text-white"
                           )}
                         >
-                          <CheckCircleIcon size={12} weight="bold" /> Present
+                          <CheckCircle size={12} weight="bold" /> Present
                         </button>
                         <button
                           onClick={() => mark(t.id, "absent")}
@@ -591,7 +591,7 @@ function TrainerAttendance() {
                             "bg-red-600 border-red-700 text-white"
                           )}
                         >
-                          <XCircleIcon size={12} weight="bold" /> Absent
+                          <XCircle size={12} weight="bold" /> Absent
                         </button>
                         <button
                           onClick={() => mark(t.id, "leave")}
@@ -601,7 +601,7 @@ function TrainerAttendance() {
                             "bg-yellow-400 border-yellow-500 text-zinc-900"
                           )}
                         >
-                          <AirplaneTiltIcon size={12} weight="bold" /> Leave
+                          <AirplaneTilt size={12} weight="bold" /> Leave
                         </button>
                       </div>
                     </td>

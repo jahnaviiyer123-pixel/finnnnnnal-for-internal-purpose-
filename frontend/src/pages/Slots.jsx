@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { PlusIcon, TrashIcon, ClockIcon } from "@phosphor-icons/react";
+import { Plus, Trash, Clock } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 export default function Slots() {
@@ -98,7 +98,7 @@ export default function Slots() {
               data-testid="add-slot-btn"
               className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3 transition-colors disabled:opacity-60"
             >
-              <PlusIcon size={14} weight="bold" />
+              <Plus size={14} weight="bold" />
               {saving ? "Adding…" : "Add slot"}
             </button>
           </div>
@@ -117,14 +117,14 @@ export default function Slots() {
             slots.map((s) => (
               <div key={s.id} className="bento p-4 flex items-center justify-between" data-testid={`slot-card-${s.id}`}>
                 <div className="flex items-center gap-3">
-                  <ClockIcon size={20} weight="bold" className="text-zinc-400" />
+                  <Clock size={20} weight="bold" className="text-zinc-400" />
                   <div className="font-heading text-xl font-black tracking-tighter font-mono-data">
                     {s.label}
                   </div>
                 </div>
                 {isAdmin && (
                   <button onClick={() => remove(s.id)} className="p-1.5 hover:bg-red-600 hover:text-white">
-                    <TrashIcon size={14} weight="bold" />
+                    <Trash size={14} weight="bold" />
                   </button>
                 )}
               </div>

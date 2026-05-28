@@ -3,13 +3,13 @@ import { Link } from "react-router-dom";
 import { api, formatApiError, API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import {
-  PlusIcon,
-  XIcon,
-  PencilSimpleIcon,
-  TrashIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  UserIcon,
+  Plus,
+  X,
+  PencilSimple,
+  Trash,
+  CheckCircle,
+  XCircle,
+  User,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import PhotoUploader from "@/components/PhotoUploader";
@@ -144,7 +144,7 @@ export default function Trainers() {
             data-testid="new-trainer-btn"
             className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3 transition-colors"
           >
-            <PlusIcon size={14} weight="bold" /> Add trainer
+            <Plus size={14} weight="bold" /> Add trainer
           </button>
         )}
       </div>
@@ -192,7 +192,7 @@ export default function Trainers() {
                       <img src={buildPhotoSrc(t.photo_url)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <UserIcon size={28} weight="bold" className="text-zinc-400" />
+                        <User size={28} weight="bold" className="text-zinc-400" />
                       </div>
                     )}
                   </div>
@@ -209,10 +209,10 @@ export default function Trainers() {
                 {isAdmin && tab === "active" && (
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button onClick={() => openEdit(t)} className="p-1.5 hover:bg-zinc-100" data-testid={`edit-trainer-${t.id}`}>
-                      <PencilSimpleIcon size={14} weight="bold" />
+                      <PencilSimple size={14} weight="bold" />
                     </button>
                     <button onClick={() => remove(t.id)} className="p-1.5 hover:bg-red-600 hover:text-white">
-                      <TrashIcon size={14} weight="bold" />
+                      <Trash size={14} weight="bold" />
                     </button>
                   </div>
                 )}
@@ -234,14 +234,14 @@ export default function Trainers() {
                     data-testid={`approve-${t.id}`}
                     className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2"
                   >
-                    <CheckCircleIcon size={12} weight="bold" /> Approve
+                    <CheckCircle size={12} weight="bold" /> Approve
                   </button>
                   <button
                     onClick={() => reject(t.id)}
                     data-testid={`reject-${t.id}`}
                     className="flex-1 inline-flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2"
                   >
-                    <XCircleIcon size={12} weight="bold" /> Reject
+                    <XCircle size={12} weight="bold" /> Reject
                   </button>
                 </div>
               )}
@@ -258,7 +258,7 @@ export default function Trainers() {
                 {editId ? "Edit trainer" : "Add trainer"}
               </h3>
               <button onClick={() => setOpen(false)} className="p-2 hover:bg-zinc-100">
-                <XIcon size={18} weight="bold" />
+                <X size={18} weight="bold" />
               </button>
             </div>
             <form onSubmit={submit} className="p-6 space-y-4">

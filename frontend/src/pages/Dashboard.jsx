@@ -3,21 +3,21 @@ import { api } from "@/lib/api";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
-  UsersIcon,
-  MotorcycleIcon,
-  CalendarCheckIcon,
-  CurrencyInrIcon,
-  ArrowUpRightIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
-  CalendarBlankIcon,
-  AirplaneTiltIcon,
-  UserIcon,
-  PhoneIcon,
-  TruckIcon,
-  StarIcon,
-  MagnifyingGlassIcon,
+  Users,
+  Motorcycle,
+  CalendarCheck,
+  CurrencyInr,
+  ArrowUpRight,
+  CheckCircle,
+  XCircle,
+  Clock,
+  CalendarBlank,
+  AirplaneTilt,
+  User,
+  Phone,
+  Truck,
+  Star,
+  MagnifyingGlass,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -249,7 +249,7 @@ export default function Dashboard() {
 
             {mySessions.length === 0 ? (
               <div className="bento p-12 text-center border-dashed border-2 border-zinc-200 bg-zinc-50/50">
-                <CalendarBlankIcon size={32} className="text-zinc-300 mx-auto mb-3" />
+                <CalendarBlank size={32} className="text-zinc-300 mx-auto mb-3" />
                 <div className="font-semibold text-zinc-700">No classes assigned today</div>
                 <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
                   Take a breather! If this seems incorrect, ask the administrator to assign classes or slots to your name.
@@ -258,7 +258,7 @@ export default function Dashboard() {
                   to="/schedule"
                   className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-700 hover:underline"
                 >
-                  View full schedule <ArrowUpRightIcon size={12} weight="bold" />
+                  View full schedule <ArrowUpRight size={12} weight="bold" />
                 </Link>
               </div>
             ) : (
@@ -275,14 +275,14 @@ export default function Dashboard() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="inline-flex items-center gap-1 bg-zinc-100 text-zinc-800 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border border-zinc-200">
-                              <ClockIcon size={10} weight="bold" /> {session.slotLabel}
+                              <Clock size={10} weight="bold" /> {session.slotLabel}
                             </span>
                             <span className="inline-flex items-center gap-1 bg-yellow-400/10 text-yellow-800 border border-yellow-400/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
                               {session.roleInClass}
                             </span>
                             {session.needs_pickup && (
                               <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-800 border border-blue-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                                <TruckIcon size={10} weight="bold" /> Pickup Needed
+                                <Truck size={10} weight="bold" /> Pickup Needed
                               </span>
                             )}
                           </div>
@@ -293,7 +293,7 @@ export default function Dashboard() {
                             {session.name}
                           </Link>
                           <div className="flex items-center gap-3 text-xs text-zinc-500 font-mono-data mt-1">
-                            <span className="flex items-center gap-1"><PhoneIcon size={11} /> {session.phone}</span>
+                            <span className="flex items-center gap-1"><Phone size={11} /> {session.phone}</span>
                             {targetCls && (
                               <span>· Class {targetCls.class_number}/10 · Status: <span className="font-bold capitalize">{targetCls.status}</span></span>
                             )}
@@ -308,13 +308,13 @@ export default function Dashboard() {
                                 onClick={() => markStudentClass(targetCls.id, "completed", session.name, targetCls.class_number)}
                                 className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
                               >
-                                <CheckCircleIcon size={12} weight="bold" /> Attended
+                                <CheckCircle size={12} weight="bold" /> Attended
                               </button>
                               <button
                                 onClick={() => markStudentClass(targetCls.id, "missed", session.name, targetCls.class_number)}
                                 className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
                               >
-                                <XCircleIcon size={12} weight="bold" /> Missed
+                                <XCircle size={12} weight="bold" /> Missed
                               </button>
                             </>
                           ) : (
@@ -354,7 +354,7 @@ export default function Dashboard() {
 
             {/* Quick search */}
             <div className="bento p-3 flex items-center gap-2.5 bg-white">
-              <MagnifyingGlassIcon size={16} className="text-zinc-400" />
+              <MagnifyingGlass size={16} className="text-zinc-400" />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -428,21 +428,21 @@ export default function Dashboard() {
           label="Total Students"
           value={stats?.total_students ?? 0}
           sublabel={`${stats?.active_students ?? 0} active`}
-          Icon={UsersIcon}
+          Icon={Users}
           testid="stat-total-students"
         />
         <Stat
           label="Trainers"
           value={stats?.total_trainers ?? 0}
           sublabel={`${stats?.present_today ?? 0} present today · ${stats?.absent_today ?? 0} absent`}
-          Icon={MotorcycleIcon}
+          Icon={Motorcycle}
           testid="stat-trainers"
         />
         <Stat
           label="Classes Today"
           value={stats?.classes_today ?? 0}
           sublabel="completed sessions"
-          Icon={CalendarCheckIcon}
+          Icon={CalendarCheck}
           testid="stat-classes-today"
         />
       </div>
@@ -460,7 +460,7 @@ export default function Dashboard() {
               to="/students"
               className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider hover:text-blue-700"
             >
-              View all <ArrowUpRightIcon size={12} weight="bold" />
+              View all <ArrowUpRight size={12} weight="bold" />
             </Link>
           </div>
 
@@ -543,7 +543,7 @@ export default function Dashboard() {
             className="mt-8 w-full inline-flex items-center justify-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-4 py-3 transition-colors"
             data-testid="mark-attendance-link"
           >
-            Mark attendance <ArrowUpRightIcon size={12} weight="bold" />
+            Mark attendance <ArrowUpRight size={12} weight="bold" />
           </Link>
         </div>
       </div>

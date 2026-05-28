@@ -3,13 +3,13 @@ import { Link } from "react-router-dom";
 import { api, formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import {
-  ClockIcon,
-  PhoneIcon,
-  TruckIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  UserIcon,
-  StarIcon,
+  Clock,
+  Phone,
+  Truck,
+  CheckCircle,
+  XCircle,
+  User,
+  Star,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -120,7 +120,7 @@ export default function Schedule() {
       {myCounts && (
         <div className="bento p-4 mb-4 flex items-center gap-6 flex-wrap" data-testid="my-summary">
           <div className="flex items-center gap-2">
-            <StarIcon size={16} weight="fill" className="text-yellow-400" />
+            <Star size={16} weight="fill" className="text-yellow-400" />
             <span className="label-tag">Your tasks today</span>
           </div>
           <div className="flex items-baseline gap-2">
@@ -159,7 +159,7 @@ export default function Schedule() {
                 <div className="flex items-center justify-between mb-4 pb-4 border-b border-zinc-200 flex-wrap gap-2">
                   <div className="flex items-center gap-3">
                     <div className="bg-zinc-900 text-yellow-400 px-3 py-2">
-                      <ClockIcon size={20} weight="bold" />
+                      <Clock size={20} weight="bold" />
                     </div>
                     <div>
                       <div className="label-tag">Slot</div>
@@ -237,12 +237,12 @@ function ScheduleCard({ row, trainerName, onMark }) {
             {row.name}
           </div>
           <div className="flex items-center gap-1 text-xs text-zinc-600 font-mono-data mt-0.5">
-            <PhoneIcon size={11} weight="bold" /> {row.phone}
+            <Phone size={11} weight="bold" /> {row.phone}
           </div>
         </Link>
         {row.needs_pickup && (
           <div className="flex items-center gap-1 bg-yellow-400 text-zinc-900 px-2 py-1 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">
-            <TruckIcon size={11} weight="bold" /> Pickup
+            <Truck size={11} weight="bold" /> Pickup
           </div>
         )}
       </div>
@@ -256,7 +256,7 @@ function ScheduleCard({ row, trainerName, onMark }) {
 
       <div className="flex items-center gap-2 text-xs text-zinc-500 mb-3 flex-wrap">
         <span className="inline-flex items-center gap-1">
-          <UserIcon size={11} weight="bold" />
+          <User size={11} weight="bold" />
           {trainerName(row.assigned_trainer_id)}
         </span>
         {targetCls && (
@@ -284,14 +284,14 @@ function ScheduleCard({ row, trainerName, onMark }) {
             data-testid={`mark-attended-${row.id}`}
             className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2"
           >
-            <CheckCircleIcon size={12} weight="bold" /> Attended
+            <CheckCircle size={12} weight="bold" /> Attended
           </button>
           <button
             onClick={() => onMark(targetCls.id, "missed", row.name, targetCls.class_number)}
             data-testid={`mark-missed-${row.id}`}
             className="flex-1 inline-flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2"
           >
-            <XCircleIcon size={12} weight="bold" /> Missed
+            <XCircle size={12} weight="bold" /> Missed
           </button>
         </div>
       )}

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { api, formatApiError, API } from "@/lib/api";
-import { CameraIcon, XIcon } from "@phosphor-icons/react";
+import { Camera, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 /**
@@ -53,7 +53,7 @@ export default function PhotoUploader({ value, onChange, size = "w-24 h-24" }) {
         {imgSrc ? (
           <img src={imgSrc} alt="" className="w-full h-full object-cover" />
         ) : (
-          <CameraIcon size={28} weight="bold" className="text-zinc-400" />
+          <Camera size={28} weight="bold" className="text-zinc-400" />
         )}
         {uploading && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
@@ -79,7 +79,7 @@ export default function PhotoUploader({ value, onChange, size = "w-24 h-24" }) {
           data-testid="upload-photo-btn"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100 disabled:opacity-50"
         >
-          <CameraIcon size={12} weight="bold" />
+          <Camera size={12} weight="bold" />
           {value ? "Change" : "Upload"} photo
         </button>
         {value && (
@@ -88,7 +88,7 @@ export default function PhotoUploader({ value, onChange, size = "w-24 h-24" }) {
             onClick={() => onChange(null)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border border-zinc-300 hover:bg-red-600 hover:text-white hover:border-red-600"
           >
-            <XIcon size={12} weight="bold" /> Remove
+            <X size={12} weight="bold" /> Remove
           </button>
         )}
       </div>
