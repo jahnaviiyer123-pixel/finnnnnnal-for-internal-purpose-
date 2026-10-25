@@ -79,3 +79,11 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    "status": "ok",
+    "service": "RideWell / Learn & Drive Google Sheet Webhook",
+    "ready": true
+  })).setMimeType(ContentService.MimeType.JSON);
+}
