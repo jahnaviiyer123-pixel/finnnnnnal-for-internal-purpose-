@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiError } from "@/lib/api";
+import { formatSlot12 } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { Link } from "react-router-dom";
 import {
@@ -215,7 +216,7 @@ function StudentAttendance({ user, isAdmin }) {
           <option value="">All Slots</option>
           {slots.map((s) => (
             <option key={s.id} value={s.label}>
-              {s.label}
+              {formatSlot12(s.label)}
             </option>
           ))}
         </select>
@@ -300,7 +301,7 @@ function StudentAttendance({ user, isAdmin }) {
                     <td className="p-3 hidden md:table-cell">
                       {s.slot_time ? (
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-zinc-100 border border-zinc-200 uppercase tracking-wider font-bold">
-                          <Clock size={10} weight="bold" /> {s.slot_time}
+                          <Clock size={10} weight="bold" /> {formatSlot12(s.slot_time)}
                         </span>
                       ) : (
                         <span className="text-xs text-zinc-400">—</span>

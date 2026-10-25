@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiError } from "@/lib/api";
+import { formatSlot12 } from "@/lib/utils";
 import {
   Printer,
   WhatsappLogo,
@@ -65,7 +66,7 @@ export default function InvoiceModal({ studentId, open, onClose }) {
 *Branch:* ${data.school.branch}
 
 *TRAINING ALLOTMENT:*
-• *Allotted Slot Time:* ${data.allotment.slot_hour}
+• *Allotted Slot Time:* ${formatSlot12(data.allotment.slot_hour)}
 • *Allotted Instructor:* ${trainerInfo}
 ${data.student.needs_pickup ? `• *Pickup Address:* ${data.student.pickup_address || "Provided"}\n` : ""}
 *12 WORKING DAYS SCHEDULE:*
@@ -78,7 +79,7 @@ ${scheduleList}
 • *Status:* ${data.financials.status_label}
 
 *MANDATORY INSTRUCTIONS:*
-1. Arrive strictly at your allotted time slot (${data.allotment.slot_hour}).
+1. Arrive strictly at your allotted time slot (${formatSlot12(data.allotment.slot_hour)}).
 2. Always carry your valid Learner's License (LLR) copy.
 3. Wear flat footwear/sneakers during training.
 4. Advance 12h notice required for emergency rescheduling.
@@ -229,7 +230,7 @@ For queries, contact your branch: ${data.school.phone}`;
                       <Clock size={14} weight="bold" /> Allotted Hour:
                     </span>
                     <span className="font-mono-data font-black text-sm text-zinc-950 bg-yellow-300 px-2 py-0.5">
-                      {allotment.slot_hour}
+                      {formatSlot12(allotment.slot_hour)}
                     </span>
                   </div>
 
@@ -298,7 +299,7 @@ For queries, contact your branch: ${data.school.phone}`;
                           {c.scheduled_date || "—"}
                         </td>
                         <td className="py-1.5 px-2.5 font-mono-data text-zinc-600">
-                          {allotment.slot_hour}
+                          {formatSlot12(allotment.slot_hour)}
                         </td>
                         <td className="py-1.5 px-2.5">
                           <span

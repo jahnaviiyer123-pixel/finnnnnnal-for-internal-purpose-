@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { api, formatApiError } from "@/lib/api";
+import { formatSlot12 } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import {
   ChartLine,
@@ -412,6 +413,8 @@ export default function Reports() {
                     <tr>
                       <th className="py-3 px-3">Trainer</th>
                       <th className="py-3 px-3">Branch Location</th>
+                      <th className="py-3 px-3 text-center">Students This Month</th>
+                      <th className="py-3 px-3 text-center">Active Students</th>
                       <th className="py-3 px-3 text-center">Classes Conducted</th>
                       <th className="py-3 px-3 text-center">Days Present</th>
                       <th className="py-3 px-3 text-center">Days Absent</th>
@@ -430,6 +433,16 @@ export default function Reports() {
                         <td className="py-3 px-3">
                           <span className="font-mono-data font-bold text-zinc-700">
                             📍 {t.location || "Khajaguda"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="inline-flex items-center gap-1 font-heading text-sm font-black text-blue-800 bg-blue-50 px-2.5 py-1 border border-blue-200">
+                            {t.new_students_month || 0}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="font-heading text-sm font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 border border-zinc-200">
+                            {t.students_assigned || 0}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-center font-heading text-lg font-black text-zinc-900">
@@ -497,7 +510,7 @@ export default function Reports() {
                           </td>
                           <td className="py-2.5 px-3 font-mono-data text-zinc-700">{s.location}</td>
                           <td className="py-2.5 px-3 font-semibold text-zinc-800">{s.assigned_trainer_name}</td>
-                          <td className="py-2.5 px-3 font-mono-data text-zinc-600">{s.slot_time || "—"}</td>
+                          <td className="py-2.5 px-3 font-mono-data text-zinc-600">{formatSlot12(s.slot_time) || "—"}</td>
                         </tr>
                       ))}
                     </tbody>

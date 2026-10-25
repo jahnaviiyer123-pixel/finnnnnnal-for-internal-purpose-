@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { formatSlot12 } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -261,7 +262,7 @@ export default function Dashboard() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="inline-flex items-center gap-1 bg-zinc-100 text-zinc-800 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border border-zinc-200">
-                              <Clock size={10} weight="bold" /> {session.slotLabel}
+                              <Clock size={10} weight="bold" /> {formatSlot12(session.slotLabel)}
                             </span>
                             <span className="inline-flex items-center gap-1 bg-yellow-400/10 text-yellow-800 border border-yellow-400/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
                               {session.roleInClass}
@@ -281,7 +282,7 @@ export default function Dashboard() {
                           <div className="flex items-center gap-3 text-xs text-zinc-500 font-mono-data mt-1">
                             <span className="flex items-center gap-1"><Phone size={11} /> {session.phone}</span>
                             {targetCls && (
-                              <span>· Class {targetCls.class_number}/10 · Status: <span className="font-bold capitalize">{targetCls.status}</span></span>
+                              <span>· Class {targetCls.class_number}/{session.total_classes || 12} · Status: <span className="font-bold capitalize">{targetCls.status}</span></span>
                             )}
                           </div>
                         </div>

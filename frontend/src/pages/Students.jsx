@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Link } from "react-router-dom";
 import { api, formatApiError } from "@/lib/api";
+import { formatSlot12 } from "@/lib/utils";
 import {
   Plus,
   X,
@@ -184,7 +185,7 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
           <Field label="Time Slot">
             <select value={form.slot_time} onChange={upd("slot_time")} className={inputCls} data-testid="student-slot-select">
               <option value="">— Pick a slot —</option>
-              {slots.map((s) => <option key={s.id} value={s.label}>{s.label}</option>)}
+              {slots.map((s) => <option key={s.id} value={s.label}>{formatSlot12(s.label)}</option>)}
             </select>
           </Field>
           <Field label="Course Days (12 Working Days)">
@@ -360,6 +361,11 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
                         </span>
                       )}
                     </div>
+                    {s.slot_time && (
+                      <div className="text-[11px] text-zinc-500 font-mono-data">
+                        🕐 {formatSlot12(s.slot_time)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </td>

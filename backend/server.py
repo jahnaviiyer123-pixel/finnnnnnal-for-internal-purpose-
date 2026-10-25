@@ -36,6 +36,10 @@ try:
         dispatch_n8n_event,
         is_n8n_configured
     )
+    from backend.google_sheets_service import (
+        sync_student_to_google_sheet,
+        is_sheets_sync_enabled
+    )
 except ImportError:
     from email_service import (
         send_smtp_email,
@@ -51,6 +55,10 @@ except ImportError:
     from n8n_service import (
         dispatch_n8n_event,
         is_n8n_configured
+    )
+    from google_sheets_service import (
+        sync_student_to_google_sheet,
+        is_sheets_sync_enabled
     )
 
 
@@ -1020,8 +1028,16 @@ async def create_student(body: StudentCreate, user: dict = Depends(get_current_u
                 [{"name": doc.get("name"), "email": doc.get("email"), "phone": doc.get("phone")}],
                 "Student"
             ))
+
+        # 4. Sync student record to Google Sheets in parallel
+        trainer_name = "Unassigned"
+        if assigned_trainer:
+            tr_user = await db.users.find_one({"id": assigned_trainer}, {"name": 1})
+            if tr_user:
+                trainer_name = tr_user.get("name", "Unassigned")
+        asyncio.create_task(asyncio.to_thread(sync_student_to_google_sheet, dict(doc), trainer_name))
     except Exception as mail_err:
-        logger.warning("Non-blocking background email/marketing/n8n error for student %s: %s", sid, mail_err)
+        logger.warning("Non-blocking background email/marketing/sheets/n8n error for student %s: %s", sid, mail_err)
 
     doc.pop("_id", None)
     if user.get("role") != "admin":
@@ -1992,18 +2008,22 @@ async def reports_summary(
         leave = sum(1 for a in t_att if a.get("status") == "leave")
         total_marked = present + absent + leave
         att_rate = round((present / total_marked * 100), 1) if total_marked > 0 else 0
+        active_assigned = sum(1 for s in students if s.get("assigned_trainer_id") == tid)
+        month_enrolled = sum(1 for s in new_students if s.get("assigned_trainer_id") == tid)
         trainer_stats.append({
             "id": tid,
             "name": t.get("name"),
             "phone": t.get("phone"),
             "location": t.get("location"),
+            "students_assigned": active_assigned,
+            "new_students_month": month_enrolled,
             "classes_conducted": len(t_classes),
             "present_days": present,
             "absent_days": absent,
             "leave_days": leave,
             "attendance_rate": att_rate,
         })
-    trainer_stats.sort(key=lambda x: x["classes_conducted"], reverse=True)
+    trainer_stats.sort(key=lambda x: (x["new_students_month"], x["students_assigned"], x["classes_conducted"]), reverse=True)
 
     # 5. Financial Metrics (Admin Only)
     total_fees_collected = 0
@@ -2252,6 +2272,34 @@ async def send_n8n_test(user: dict = Depends(require_admin)):
     }
     res = await asyncio.to_thread(dispatch_n8n_event, "test.invoice.generate", test_data)
     return res
+
+
+
+# ---------- Google Sheets Settings ----------
+@api.get("/settings/google-sheet")
+async def get_google_sheet_setting(user: dict = Depends(get_current_user)):
+    setting = await db.settings.find_one({"key": "google_sheet_webhook"})
+    url = setting.get("url", "") if setting else ""
+    if not url:
+        url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL", "")
+    return {
+        "configured": bool(url),
+        "webhook_url": url,
+    }
+
+
+@api.post("/settings/google-sheet")
+async def save_google_sheet_setting(body: dict, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    url = body.get("webhook_url", "").strip()
+    await db.settings.update_one(
+        {"key": "google_sheet_webhook"},
+        {"$set": {"key": "google_sheet_webhook", "url": url}},
+        upsert=True
+    )
+    os.environ["GOOGLE_SHEET_WEBHOOK_URL"] = url
+    return {"ok": True, "webhook_url": url}
 
 
 # Include router + middleware

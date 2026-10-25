@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { api, formatApiError } from "@/lib/api";
+import { formatSlot12 } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import {
   Clock,
@@ -422,7 +423,7 @@ export default function Schedule() {
                         <div>
                           <div className="label-tag">Slot</div>
                           <h2 className="font-heading text-2xl font-black tracking-tighter font-mono-data">
-                            {slot.label}
+                            {formatSlot12(slot.label)}
                           </h2>
                         </div>
                       </div>

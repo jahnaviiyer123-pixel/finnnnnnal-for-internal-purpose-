@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api, formatApiError, API } from "@/lib/api";
+import { formatSlot12 } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import {
   ArrowLeft,
@@ -217,12 +218,12 @@ export default function StudentDetail() {
                   <option value="">— Pick a slot —</option>
                   {slots.map((s) => (
                     <option key={s.id} value={s.label}>
-                      {s.label}
+                      {formatSlot12(s.label)}
                     </option>
                   ))}
                 </select>
               ) : (
-                <div className="text-sm font-semibold font-mono-data">{student.slot_time || "—"}</div>
+                <div className="text-sm font-semibold font-mono-data">{formatSlot12(student.slot_time) || "—"}</div>
               )}
             </div>
             <div>

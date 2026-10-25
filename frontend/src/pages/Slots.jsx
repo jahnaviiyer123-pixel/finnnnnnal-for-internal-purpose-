@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiError } from "@/lib/api";
+import { formatSlot12 } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { Plus, Trash, Clock } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -119,7 +120,7 @@ export default function Slots() {
                 <div className="flex items-center gap-3">
                   <Clock size={20} weight="bold" className="text-zinc-400" />
                   <div className="font-heading text-xl font-black tracking-tighter font-mono-data">
-                    {s.label}
+                    {formatSlot12(s.label)}
                   </div>
                 </div>
                 {isAdmin && (
