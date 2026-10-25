@@ -34,6 +34,10 @@ function StudentAvatar({ url, name }) {
 }
 
 function EnrollDialog({ open, onClose, trainers, onCreated }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const isTrainer = user?.role === "trainer";
+  const isManager = user?.role === "manager";
   const today = new Date().toISOString().slice(0, 10);
   const [slots, setSlots] = useState([]);
   const [form, setForm] = useState({
@@ -43,24 +47,45 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
     age: "",
     gender: "",
     license_type: "gearless",
+    location: user?.location || "Khajaguda",
     joining_date: today,
     slot_time: "",
     needs_pickup: false,
     pickup_address: "",
     drop_address: "",
-    total_classes: 10,
-    assigned_trainer_id: "",
+    total_classes: 12,
+    assigned_trainer_id: isTrainer ? (user?.id || "") : "",
     fees_total: 0,
     fees_paid: 0,
     notes: "",
   });
   const [saving, setSaving] = useState(false);
 
+  const activeLocation = (isTrainer || isManager) ? (user?.location || "Khajaguda") : (form.location || "Khajaguda");
+  const locationTrainers = trainers.filter((t) => !t.location || t.location === activeLocation);
+
+  const onLocationChange = (newLoc) => {
+    const filtered = trainers.filter((t) => !t.location || t.location === newLoc);
+    setForm((prev) => ({
+      ...prev,
+      location: newLoc,
+      assigned_trainer_id: filtered.some((t) => t.id === prev.assigned_trainer_id) ? prev.assigned_trainer_id : "",
+      pickup_trainer_id: filtered.some((t) => t.id === prev.pickup_trainer_id) ? prev.pickup_trainer_id : "",
+      drop_trainer_id: filtered.some((t) => t.id === prev.drop_trainer_id) ? prev.drop_trainer_id : "",
+    }));
+  };
+
   useEffect(() => {
     if (open) {
+      setForm((prev) => ({
+        ...prev,
+        location: (isTrainer || isManager) ? (user?.location || "Khajaguda") : prev.location,
+        assigned_trainer_id: isTrainer ? (user?.id || "") : prev.assigned_trainer_id,
+        total_classes: 12,
+      }));
       api.get("/slots").then((r) => setSlots(r.data)).catch(() => {});
     }
-  }, [open]);
+  }, [open, user, isTrainer, isManager]);
 
   if (!open) return null;
 
@@ -69,6 +94,10 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
     setSaving(true);
     try {
       const payload = { ...form };
+      payload.location = (isTrainer || isManager) ? (user?.location || "Khajaguda") : (form.location || "Khajaguda");
+      if (isTrainer) {
+        payload.assigned_trainer_id = user?.id;
+      }
       if (!payload.assigned_trainer_id) delete payload.assigned_trainer_id;
       if (!payload.pickup_trainer_id) delete payload.pickup_trainer_id;
       if (!payload.drop_trainer_id) delete payload.drop_trainer_id;
@@ -80,11 +109,11 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
       else payload.age = Number(payload.age);
       if (!payload.pickup_address) delete payload.pickup_address;
       if (!payload.drop_address) delete payload.drop_address;
-      payload.total_classes = Number(payload.total_classes) || 10;
-      payload.fees_total = Number(payload.fees_total) || 0;
-      payload.fees_paid = Number(payload.fees_paid) || 0;
+      payload.total_classes = Number(payload.total_classes) || 12;
+      payload.fees_total = isAdmin ? (Number(payload.fees_total) || 0) : 0;
+      payload.fees_paid = isAdmin ? (Number(payload.fees_paid) || 0) : 0;
       const { data } = await api.post("/students", payload);
-      toast.success("Student enrolled");
+      toast.success("Student enrolled with 12 working days schedule");
       onCreated(data);
       onClose();
     } catch (e) {
@@ -136,6 +165,19 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
               <option value="both">Both</option>
             </select>
           </Field>
+          <Field label="Branch Location *">
+            {isTrainer || isManager ? (
+              <div className="p-2 bg-zinc-100 border border-zinc-300 text-xs font-bold text-zinc-700 uppercase">
+                📍 {user?.location || "Khajaguda"} Branch ({isTrainer ? "Trainer" : "Manager"} assigned)
+              </div>
+            ) : (
+              <select value={form.location} onChange={(e) => onLocationChange(e.target.value)} className={inputCls} data-testid="student-location-select">
+                <option value="Khajaguda">Khajaguda</option>
+                <option value="Manikonda">Manikonda</option>
+                <option value="Kondapur">Kondapur</option>
+              </select>
+            )}
+          </Field>
           <Field label="Joining Date">
             <input type="date" value={form.joining_date} onChange={upd("joining_date")} className={inputCls} />
           </Field>
@@ -145,39 +187,54 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
               {slots.map((s) => <option key={s.id} value={s.label}>{s.label}</option>)}
             </select>
           </Field>
-          <Field label="Total Classes (Course Days)">
+          <Field label="Course Days (12 Working Days)">
             <input type="number" min="1" max="30" value={form.total_classes} onChange={upd("total_classes")} className={inputCls} />
           </Field>
-          <Field label="Assigned Trainer">
-            <select value={form.assigned_trainer_id} onChange={upd("assigned_trainer_id")} className={inputCls}>
-              <option value="">— Unassigned —</option>
-              {trainers.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+          <Field label={`Assigned Trainer (${activeLocation})`}>
+            {isTrainer ? (
+              <input disabled value={`${user?.name || "You"} (Assigned to you)`} className={`${inputCls} bg-zinc-100 text-zinc-600 font-bold`} />
+            ) : (
+              <>
+                <select value={form.assigned_trainer_id} onChange={upd("assigned_trainer_id")} className={inputCls} data-testid="assigned-trainer-select">
+                  <option value="">— Select {activeLocation} Trainer —</option>
+                  {locationTrainers.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.location || activeLocation})</option>
+                  ))}
+                </select>
+                {locationTrainers.length === 0 && (
+                  <span className="text-[10px] text-amber-700 font-bold block mt-1">
+                    ⚠️ No trainers registered in {activeLocation} branch yet.
+                  </span>
+                )}
+              </>
+            )}
           </Field>
-          <Field label="Pickup Trainer">
+          <Field label={`Pickup Trainer (${activeLocation})`}>
             <select value={form.pickup_trainer_id} onChange={upd("pickup_trainer_id")} className={inputCls} data-testid="pickup-trainer-select">
               <option value="">— None —</option>
-              {trainers.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+              {locationTrainers.map((t) => (
+                <option key={t.id} value={t.id}>{t.name} ({t.location || activeLocation})</option>
               ))}
             </select>
           </Field>
-          <Field label="Drop Trainer">
+          <Field label={`Drop Trainer (${activeLocation})`}>
             <select value={form.drop_trainer_id} onChange={upd("drop_trainer_id")} className={inputCls} data-testid="drop-trainer-select">
               <option value="">— None —</option>
-              {trainers.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+              {locationTrainers.map((t) => (
+                <option key={t.id} value={t.id}>{t.name} ({t.location || activeLocation})</option>
               ))}
             </select>
           </Field>
-          <Field label="Fees Total (₹)">
-            <input type="number" value={form.fees_total} onChange={upd("fees_total")} className={inputCls} />
-          </Field>
-          <Field label="Fees Paid (₹)">
-            <input type="number" value={form.fees_paid} onChange={upd("fees_paid")} className={inputCls} />
-          </Field>
+          {isAdmin && (
+            <>
+              <Field label="Fees Total (₹)">
+                <input type="number" value={form.fees_total} onChange={upd("fees_total")} className={inputCls} />
+              </Field>
+              <Field label="Fees Paid (₹)">
+                <input type="number" value={form.fees_paid} onChange={upd("fees_paid")} className={inputCls} />
+              </Field>
+            </>
+          )}
           <div className="md:col-span-2 border-t border-zinc-200 pt-4">
             <div className="label-tag mb-2">Profile photo</div>
             <PhotoUploader value={form.photo_url} onChange={(url) => setForm({ ...form, photo_url: url })} size="w-20 h-20" />
@@ -262,9 +319,10 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
           <th className="label-tag p-3">Name</th>
           <th className="label-tag p-3">Phone</th>
           <th className="label-tag p-3 hidden md:table-cell">Joined</th>
+          <th className="label-tag p-3 hidden sm:table-cell">Branch</th>
           <th className="label-tag p-3 hidden md:table-cell">Type</th>
           <th className="label-tag p-3 text-right">Progress</th>
-          <th className="label-tag p-3 text-right">Fees</th>
+          {isAdmin && <th className="label-tag p-3 text-right">Fees</th>}
           <th className="label-tag p-3 text-right">Status</th>
           {isAdmin && <th className="label-tag p-3 text-right">Actions</th>}
         </tr>
@@ -272,24 +330,47 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
       <tbody>
         {students.map((s) => {
           const pending = (s.fees_total || 0) - (s.fees_paid || 0);
+          const totalC = s.total_classes || 12;
+          const completedC = s.classes_completed || 0;
+          const remC = s.classes_remaining != null ? s.classes_remaining : Math.max(0, totalC - completedC);
+          const isEndingSoon = s.status === "active" && (s.is_ending_soon || (remC > 0 && remC <= 3));
+
           return (
             <tr
               key={s.id}
-              className="border-b border-zinc-100 hover:bg-zinc-50 cursor-pointer"
+              className={`border-b transition-colors cursor-pointer ${
+                isEndingSoon
+                  ? "bg-amber-50/80 hover:bg-amber-100/70 border-l-4 border-l-amber-500"
+                  : "border-zinc-100 hover:bg-zinc-50"
+              }`}
               onClick={() => (window.location.href = `/students/${s.id}`)}
               data-testid={`student-row-${s.id}`}
             >
               <td className="p-3">
                 <div className="flex items-center gap-3">
                   <StudentAvatar url={s.photo_url} name={s.name} />
-                  <Link to={`/students/${s.id}`} className="font-semibold hover:text-blue-700" onClick={(e) => e.stopPropagation()}>
-                    {s.name}
-                  </Link>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link to={`/students/${s.id}`} className="font-semibold hover:text-blue-700" onClick={(e) => e.stopPropagation()}>
+                        {s.name}
+                      </Link>
+                      {isEndingSoon && (
+                        <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 font-black uppercase tracking-wider bg-amber-500 text-white rounded-none" title="Last 3 working days: Slot will be open soon for re-booking">
+                          ⚡ Last {remC} Days
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </td>
               <td className="p-3 font-mono-data text-xs text-zinc-600">{s.phone}</td>
               <td className="p-3 hidden md:table-cell font-mono-data text-xs text-zinc-600">
                 {s.joining_date}
+              </td>
+              <td className="p-3 hidden sm:table-cell">
+                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200">
+                  {s.location || "Khajaguda"}
+                </span>
               </td>
               <td className="p-3 hidden md:table-cell">
                 <span className="inline-block text-[10px] px-2 py-0.5 border border-zinc-300 uppercase tracking-wider font-bold">
@@ -298,29 +379,33 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
               </td>
               <td className="p-3 text-right font-mono-data text-xs">
                 <div className="inline-flex items-center gap-2 justify-end">
-                  <span>{s.classes_completed}/{s.total_classes}</span>
+                  <span className={isEndingSoon ? "text-amber-700 font-bold" : ""}>
+                    {completedC}/{totalC}
+                  </span>
                   <span className="w-16 h-1.5 bg-zinc-100 relative">
                     <span
-                       className="absolute left-0 top-0 bottom-0 bg-emerald-600"
-                      style={{ width: `${(s.classes_completed / s.total_classes) * 100}%` }}
+                      className={`absolute left-0 top-0 bottom-0 ${isEndingSoon ? "bg-amber-500" : "bg-emerald-600"}`}
+                      style={{ width: `${Math.min(100, (completedC / totalC) * 100)}%` }}
                     />
                   </span>
                 </div>
               </td>
-              <td className="p-3 text-right font-mono-data text-xs">
-                {pending > 0 ? (
-                  <span className="text-red-700 font-bold">₹{pending.toLocaleString("en-IN")} due</span>
-                ) : (
-                  <span className="text-emerald-700 font-bold">Paid</span>
-                )}
-              </td>
+              {isAdmin && (
+                <td className="p-3 text-right font-mono-data text-xs">
+                  {pending > 0 ? (
+                    <span className="text-red-700 font-bold">₹{pending.toLocaleString("en-IN")} due</span>
+                  ) : (
+                    <span className="text-emerald-700 font-bold">Paid</span>
+                  )}
+                </td>
+              )}
               <td className="p-3 text-right">
                 <span className={`inline-block text-[10px] px-2 py-0.5 uppercase tracking-wider font-bold border ${
-                  s.status === "active" ? "bg-blue-50 text-blue-800 border-blue-200" :
+                  s.status === "active" ? (isEndingSoon ? "bg-amber-100 text-amber-900 border-amber-300" : "bg-blue-50 text-blue-800 border-blue-200") :
                   s.status === "completed" ? "bg-emerald-50 text-emerald-800 border-emerald-200" :
                   "bg-zinc-100 text-zinc-700 border-zinc-200"
                 }`}>
-                  {s.status}
+                  {isEndingSoon ? "Ending Soon" : s.status}
                 </span>
               </td>
               {isAdmin && (
@@ -360,28 +445,76 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
 export default function Students() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const [students, setStudents] = useState([]);
+  const isManager = user?.role === "manager";
+  const isManagerOrAdmin = isAdmin || isManager;
+  const [activeStudents, setActiveStudents] = useState([]);
+  const [oldStudents, setOldStudents] = useState([]);
+  const [oldLoaded, setOldLoaded] = useState(false);
   const [trainers, setTrainers] = useState([]);
+  const [locations, setLocations] = useState(["Khajaguda", "Manikonda", "Kondapur"]);
+  const [selectedLocation, setSelectedLocation] = useState(isAdmin ? "" : (user?.location || "Khajaguda"));
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingOld, setLoadingOld] = useState(false);
   const [tab, setTab] = useState("active");
 
-  const load = async () => {
-    const [sRes, tRes] = await Promise.all([api.get("/students"), api.get("/trainers")]);
-    setStudents(sRes.data);
+  const load = async (loc = selectedLocation) => {
+    const locParam = loc ? `&location=${loc}` : "";
+    const trainerLocParam = loc ? `?location=${loc}` : "";
+    const [sRes, tRes] = await Promise.all([
+      api.get(`/students?status=active${locParam}`),
+      api.get(`/trainers${trainerLocParam}`),
+    ]);
+    setActiveStudents(sRes.data);
     setTrainers(tRes.data);
+  };
+
+  const loadOld = async (loc = selectedLocation) => {
+    setLoadingOld(true);
+    try {
+      const locParam = loc ? `&location=${loc}` : "";
+      const res = await api.get(`/students?status=old${locParam}`);
+      setOldStudents(res.data);
+      setOldLoaded(true);
+    } catch {
+      toast.error("Failed to load historical students");
+    } finally {
+      setLoadingOld(false);
+    }
   };
 
   useEffect(() => {
     (async () => {
-      try { await load(); } finally { setLoading(false); }
+      try {
+        const locRes = await api.get("/locations").catch(() => null);
+        if (locRes?.data && Array.isArray(locRes.data) && locRes.data.length > 0) {
+          setLocations(locRes.data);
+        }
+        await load();
+      } finally {
+        setLoading(false);
+      }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Split students by status
-  const activeStudents = students.filter((s) => s.status === "active");
-  const oldStudents = students.filter((s) => s.status === "completed" || s.status === "dropped");
+  useEffect(() => {
+    if (tab === "old" && !oldLoaded) {
+      loadOld();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, oldLoaded]);
+
+  const handleLocationChange = (newLoc) => {
+    setSelectedLocation(newLoc);
+    load(newLoc);
+    if (tab === "old") {
+      loadOld(newLoc);
+    } else {
+      setOldLoaded(false);
+    }
+  };
 
   const currentList = tab === "active" ? activeStudents : oldStudents;
 
@@ -400,14 +533,36 @@ export default function Students() {
             Students
           </h1>
         </div>
-        <button
-          onClick={() => setOpen(true)}
-          data-testid="new-student-btn"
-          className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3 transition-colors"
-        >
-          <Plus size={14} weight="bold" />
-          Enroll student
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          {isManagerOrAdmin ? (
+            <div className="flex items-center gap-2 bg-white border border-zinc-300 px-3 py-2">
+              <span className="label-tag text-[10px]">Branch:</span>
+              <select
+                value={selectedLocation}
+                onChange={(e) => handleLocationChange(e.target.value)}
+                className="bg-transparent text-xs font-bold uppercase tracking-wider outline-none cursor-pointer"
+                data-testid="student-branch-filter"
+              >
+                {isAdmin && <option value="">All Branches</option>}
+                {locations.map((loc) => (
+                  <option key={loc} value={loc}>{loc} Branch</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold uppercase tracking-wider">
+              <span>📍 {user?.location || "Khajaguda"} Branch</span>
+            </div>
+          )}
+          <button
+            onClick={() => setOpen(true)}
+            data-testid="new-student-btn"
+            className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3 transition-colors"
+          >
+            <Plus size={14} weight="bold" />
+            Enroll student
+          </button>
+        </div>
       </div>
 
       {/* Tabs: Active / Old Students */}
@@ -434,7 +589,7 @@ export default function Students() {
           }`}
         >
           <Archive size={14} weight="bold" /> Old Students
-          <span className="font-mono-data ml-1">({oldStudents.length})</span>
+          <span className="font-mono-data ml-1">({oldLoaded ? oldStudents.length : "…"})</span>
         </button>
       </div>
 
@@ -455,9 +610,14 @@ export default function Students() {
       <div className="bento overflow-x-auto">
         <StudentTable
           students={filtered}
-          loading={loading}
+          loading={tab === "active" ? loading : loadingOld}
           onEnroll={tab === "active" ? () => setOpen(true) : null}
-          onReload={load}
+          onReload={() => {
+            load();
+            if (oldLoaded) {
+              setOldLoaded(false);
+            }
+          }}
           isAdmin={isAdmin}
         />
       </div>

@@ -17,8 +17,9 @@ const NAV = [
   { to: "/dashboard", label: "Dashboard", Icon: Gauge },
   { to: "/schedule", label: "Schedule", Icon: CalendarBlank },
   { to: "/students", label: "Students", Icon: Users },
-  { to: "/trainers", label: "Trainers", Icon: Motorcycle, adminOnly: true },
+  { to: "/trainers", label: "Trainers", Icon: Motorcycle, managerOrAdmin: true },
   { to: "/attendance", label: "Attendance", Icon: CalendarCheck },
+  { to: "/reports", label: "Reports", Icon: ChartLine, managerOrAdmin: true },
   { to: "/payments", label: "Payments", Icon: CurrencyInr, adminOnly: true },
 ];
 
@@ -66,8 +67,11 @@ export default function Sidebar({ isOpen, setIsOpen }) {
       </div>
 
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        <div className="label-tag px-3 py-2">Menu</div>
-        {NAV.filter((n) => !n.adminOnly || user?.role === "admin").map(({ to, label, Icon }) => (
+        {NAV.filter((n) => {
+          if (n.adminOnly) return user?.role === "admin";
+          if (n.managerOrAdmin) return user?.role === "admin" || user?.role === "manager";
+          return true;
+        }).map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}

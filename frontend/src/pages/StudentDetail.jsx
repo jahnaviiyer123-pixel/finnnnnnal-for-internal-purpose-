@@ -11,8 +11,10 @@ import {
   FloppyDisk,
   Trash,
   User,
+  FileText,
 } from "@phosphor-icons/react";
 import PhotoUploader from "@/components/PhotoUploader";
+import InvoiceModal from "@/components/InvoiceModal";
 import { toast } from "sonner";
 
 export default function StudentDetail() {
@@ -28,6 +30,7 @@ export default function StudentDetail() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
 
   const load = async () => {
     const [s, c, t, sl] = await Promise.all([
@@ -142,29 +145,40 @@ export default function StudentDetail() {
               </div>
               </div>
             </div>
-            {isAdmin && (
-              <div className="flex items-center gap-2">
-                {editing ? (
-                  <>
-                    <button onClick={() => { setEditing(false); setEditForm(student); }} className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100">
-                      Cancel
-                    </button>
-                    <button onClick={saveEdit} data-testid="save-student-btn" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-blue-700">
-                      <FloppyDisk size={12} weight="bold" /> Save
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button onClick={() => setEditing(true)} data-testid="edit-student-btn" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100">
-                      <PencilSimple size={12} weight="bold" /> Edit
-                    </button>
-                    <button onClick={deleteStudent} data-testid="delete-student-btn" className="p-2 border border-zinc-300 hover:bg-red-600 hover:text-white hover:border-red-600">
-                      <Trash size={14} weight="bold" />
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setInvoiceOpen(true)}
+                data-testid="view-invoice-btn"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-zinc-800 transition-colors shadow-sm"
+              >
+                <FileText size={14} weight="bold" /> Admission Slip &amp; Bill
+              </button>
+
+              {isAdmin && (
+                <>
+                  {editing ? (
+                    <>
+                      <button onClick={() => { setEditing(false); setEditForm(student); }} className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100">
+                        Cancel
+                      </button>
+                      <button onClick={saveEdit} data-testid="save-student-btn" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-blue-700">
+                        <FloppyDisk size={12} weight="bold" /> Save
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => setEditing(true)} data-testid="edit-student-btn" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider border border-zinc-300 hover:bg-zinc-100">
+                        <PencilSimple size={12} weight="bold" /> Edit
+                      </button>
+                      <button onClick={deleteStudent} data-testid="delete-student-btn" className="p-2 border border-zinc-300 hover:bg-red-600 hover:text-white hover:border-red-600">
+                        <Trash size={14} weight="bold" />
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 border-t border-zinc-200 pt-6">
@@ -227,7 +241,7 @@ export default function StudentDetail() {
               )}
             </div>
             <div>
-              <div className="label-tag mb-1.5">Trainer</div>
+              <div className="label-tag mb-1.5">Trainer ({student.location || "Branch"})</div>
               {editing ? (
                 <select
                   value={editForm.assigned_trainer_id || ""}
@@ -235,7 +249,9 @@ export default function StudentDetail() {
                   className="w-full border border-zinc-300 px-2 py-1.5 text-sm"
                 >
                   <option value="">— Unassigned —</option>
-                  {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {trainers.filter((t) => !t.location || t.location === (student?.location || "Khajaguda")).map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.location || student.location})</option>
+                  ))}
                 </select>
               ) : (
                 <div className="text-sm font-semibold">{trainerName(student.assigned_trainer_id)}</div>
@@ -264,7 +280,7 @@ export default function StudentDetail() {
               <div className="label-tag mb-3">Pickup &amp; drop</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <div className="label-tag mb-1.5">Pickup trainer</div>
+                  <div className="label-tag mb-1.5">Pickup trainer ({student.location || "Branch"})</div>
                   {editing ? (
                     <select
                       value={editForm.pickup_trainer_id || ""}
@@ -273,14 +289,16 @@ export default function StudentDetail() {
                       data-testid="pickup-trainer-edit"
                     >
                       <option value="">— None —</option>
-                      {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      {trainers.filter((t) => !t.location || t.location === (student?.location || "Khajaguda")).map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.location || student.location})</option>
+                      ))}
                     </select>
                   ) : (
                     <div className="text-sm font-semibold">{trainerName(student.pickup_trainer_id)}</div>
                   )}
                 </div>
                 <div>
-                  <div className="label-tag mb-1.5">Drop trainer</div>
+                  <div className="label-tag mb-1.5">Drop trainer ({student.location || "Branch"})</div>
                   {editing ? (
                     <select
                       value={editForm.drop_trainer_id || ""}
@@ -289,7 +307,9 @@ export default function StudentDetail() {
                       data-testid="drop-trainer-edit"
                     >
                       <option value="">— None —</option>
-                      {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      {trainers.filter((t) => !t.location || t.location === (student?.location || "Khajaguda")).map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.location || student.location})</option>
+                      ))}
                     </select>
                   ) : (
                     <div className="text-sm font-semibold">{trainerName(student.drop_trainer_id)}</div>
@@ -397,6 +417,13 @@ export default function StudentDetail() {
           <PaymentSection studentId={id} payments={payments} onReload={load} isAdmin={isAdmin} />
         </div>
       )}
+
+      {/* Official Admission Slip & Invoice Modal */}
+      <InvoiceModal
+        studentId={id}
+        open={invoiceOpen}
+        onClose={() => setInvoiceOpen(false)}
+      />
     </div>
   );
 }

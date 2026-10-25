@@ -28,6 +28,8 @@ function buildPhotoSrc(url) {
 export default function TrainerDetail() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager";
+  const isManagerOrAdmin = isAdmin || isManager;
   const { id } = useParams();
   
   const [trainer, setTrainer] = useState(null);
@@ -46,6 +48,7 @@ export default function TrainerDetail() {
   // Calendar month selection
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth()); // 0-indexed
+  const [holidays, setHolidays] = useState([]);
 
   const load = async () => {
     try {
@@ -70,6 +73,13 @@ export default function TrainerDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  useEffect(() => {
+    api
+      .get(`/holidays?year=${currentYear}&month=${currentMonth + 1}`)
+      .then((res) => setHolidays(res.data || []))
+      .catch(() => setHolidays([]));
+  }, [currentYear, currentMonth]);
+
   const saveDetails = async () => {
     try {
       const payload = {
@@ -88,7 +98,7 @@ export default function TrainerDetail() {
 
   // Toggle/Mark attendance directly from calendar between Present and Absent
   const toggleAttendance = async (dateStr, currentStatus) => {
-    if (!isAdmin) return; // Only admin can mark trainer attendance
+    if (!isManagerOrAdmin) return; // Only manager or admin can mark trainer attendance
     const newStatus = currentStatus === "present" ? "absent" : "present";
     
     try {
@@ -96,7 +106,7 @@ export default function TrainerDetail() {
         trainer_id: id,
         date: dateStr,
         status: newStatus,
-        notes: `Marked ${newStatus} by admin`,
+        notes: `Marked ${newStatus} by ${user?.role || "manager"}`,
       });
       toast.success(`Attendance updated for ${dateStr}`);
       await load();
@@ -113,8 +123,9 @@ export default function TrainerDetail() {
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const calendarDays = [];
   
-  // Calculate Sundays & Working days for salary math
+  // Calculate Sundays, Holidays & Working days for salary math
   let totalSundays = 0;
+  let totalHolidays = 0;
   let presentDays = 0;
   let absentDays = 0;
 
@@ -129,11 +140,18 @@ export default function TrainerDetail() {
     const dd = String(d).padStart(2, "0");
     const dateStr = `${yyyy}-${mm}-${dd}`;
 
+    const holidayRecord = holidays.find(
+      (h) => h.date === dateStr && (!h.location || h.location === trainer?.location)
+    );
+    const isHoliday = !!holidayRecord;
+
     const record = attendance.find((a) => a.date === dateStr);
     const status = record ? record.status : "";
 
     if (isSunday) {
       totalSundays++;
+    } else if (isHoliday) {
+      totalHolidays++;
     } else {
       if (status === "present") presentDays++;
       if (status === "absent") absentDays++;
@@ -143,6 +161,8 @@ export default function TrainerDetail() {
       dayNum: d,
       dayName,
       isSunday,
+      isHoliday,
+      holidayRecord,
       dateStr,
       status,
       notes: record?.notes || "",
@@ -150,7 +170,7 @@ export default function TrainerDetail() {
   }
 
   // Salary calculations based on actual present days worked
-  const workingDaysInMonth = daysInMonth - totalSundays;
+  const workingDaysInMonth = Math.max(1, daysInMonth - totalSundays - totalHolidays);
   const baseSalary = trainer.base_salary || 0;
   const perDaySalary = workingDaysInMonth > 0 ? baseSalary / workingDaysInMonth : 0;
   const finalSalary = perDaySalary * presentDays;
@@ -199,7 +219,12 @@ export default function TrainerDetail() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <span className="label-tag">Team Trainer</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="label-tag">Team Trainer</span>
+                  <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200">
+                    📍 {trainer.location || "Khajaguda"} Branch
+                  </span>
+                </div>
                 <h1 className="font-heading text-3xl sm:text-4xl font-black tracking-tighter leading-none mt-1">
                   {trainer.name}
                 </h1>
@@ -380,9 +405,9 @@ export default function TrainerDetail() {
             </div>
           </div>
 
-          {isAdmin && (
-            <p className="text-xs text-zinc-400 mb-4 bg-zinc-50 p-2.5 border border-zinc-200">
-              💡 **Admin Action:** Click on any calendar working day below to toggle or mark trainer attendance between **Present** / **Absent**. Sundays are auto-holidays.
+          {isManagerOrAdmin && (
+            <p className="text-xs text-zinc-500 mb-4 bg-zinc-50 p-2.5 border border-zinc-200">
+              💡 **{isAdmin ? "Admin" : "Manager"} Action:** Click on any calendar working day below to toggle or mark trainer attendance between **Present** / **Absent**. Sundays are auto-holidays.
             </p>
           )}
 
@@ -404,10 +429,12 @@ export default function TrainerDetail() {
             ))}
 
             {/* Calendar Days */}
-            {calendarDays.map(({ dayNum, isSunday, dateStr, status }) => {
+            {calendarDays.map(({ dayNum, isSunday, isHoliday, holidayRecord, dateStr, status }) => {
               let bgClass = "bg-zinc-50 border-zinc-200 text-zinc-800 hover:bg-zinc-100";
               if (isSunday) {
                 bgClass = "bg-zinc-100/50 border-zinc-200 text-zinc-400 cursor-not-allowed";
+              } else if (isHoliday) {
+                bgClass = "bg-purple-50 border-purple-200 text-purple-900 cursor-not-allowed";
               } else if (status === "present") {
                 bgClass = "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100";
               } else if (status === "absent") {
@@ -417,13 +444,18 @@ export default function TrainerDetail() {
               return (
                 <button
                   key={`day-${dayNum}`}
-                  disabled={isSunday || !isAdmin}
+                  disabled={isSunday || isHoliday || !isManagerOrAdmin}
                   onClick={() => toggleAttendance(dateStr, status)}
                   className={`h-16 border p-2 flex flex-col justify-between items-start transition-all relative select-none ${bgClass}`}
+                  title={isHoliday ? `${holidayRecord?.title} (${holidayRecord?.type})` : undefined}
                 >
                   <span className="font-mono-data text-xs font-bold">{dayNum}</span>
                   {isSunday ? (
                     <span className="text-[8px] uppercase tracking-wider font-extrabold text-zinc-400">Off</span>
+                  ) : isHoliday ? (
+                    <span className="text-[7.5px] uppercase tracking-wider font-extrabold text-purple-700 truncate max-w-full">
+                      {holidayRecord?.type === "function" ? "🎪 Event" : "🎉 Holiday"}
+                    </span>
                   ) : status ? (
                     <span className={`text-[8px] uppercase tracking-wider font-extrabold ${
                       status === "present" ? "text-emerald-700" : "text-red-700"

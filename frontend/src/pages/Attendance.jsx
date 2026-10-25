@@ -18,6 +18,8 @@ import { toast } from "sonner";
 export default function Attendance() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager";
+  const isManagerOrAdmin = isAdmin || isManager;
   const [tab, setTab] = useState("students");
 
   return (
@@ -44,7 +46,7 @@ export default function Attendance() {
         >
           <Users size={14} weight="bold" /> Student Attendance
         </button>
-        {isAdmin && (
+        {isManagerOrAdmin && (
           <button
             onClick={() => setTab("trainers")}
             data-testid="tab-trainers"
@@ -60,7 +62,7 @@ export default function Attendance() {
       </div>
 
       {tab === "students" ? (
-        <StudentAttendance user={user} isAdmin={isAdmin} />
+        <StudentAttendance user={user} isAdmin={isManagerOrAdmin} />
       ) : (
         <TrainerAttendance />
       )}
@@ -85,29 +87,16 @@ function StudentAttendance({ user, isAdmin }) {
   const load = async () => {
     setLoading(true);
     try {
-      const [sRes, tRes, slotRes] = await Promise.all([
-        api.get("/students"),
+      const [sRes, tRes, slotRes, classMapRes] = await Promise.all([
+        api.get("/students?status=active"),
         api.get("/trainers"),
         api.get("/slots"),
+        api.get("/classes/active"),
       ]);
-      setStudents(sRes.data.filter((s) => s.status === "active"));
+      setStudents(sRes.data);
       setTrainers(tRes.data);
       setSlots(slotRes.data);
-
-      // Load classes for all active students
-      const activeStudents = sRes.data.filter((s) => s.status === "active");
-      const classMap = {};
-      await Promise.all(
-        activeStudents.map(async (s) => {
-          try {
-            const res = await api.get(`/students/${s.id}/classes`);
-            classMap[s.id] = res.data;
-          } catch {
-            classMap[s.id] = [];
-          }
-        })
-      );
-      setClasses(classMap);
+      setClasses(classMapRes.data || {});
     } catch (e) {
       toast.error("Failed to load data");
     } finally {
@@ -413,15 +402,22 @@ function TrainerAttendance() {
   const [records, setRecords] = useState([]);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(true);
+  const [locations, setLocations] = useState([]);
+  const [locFilter, setLocFilter] = useState("");
 
   const load = async () => {
+    const locParam = locFilter ? `?location=${encodeURIComponent(locFilter)}` : "";
     const [t, a] = await Promise.all([
-      api.get("/trainers"),
+      api.get(`/trainers${locParam}`),
       api.get(`/attendance?date=${date}`),
     ]);
     setTrainers(t.data);
     setRecords(a.data);
   };
+
+  useEffect(() => {
+    api.get("/locations").then((r) => setLocations(r.data)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -433,7 +429,7 @@ function TrainerAttendance() {
       }
     })();
     // eslint-disable-next-line
-  }, [date]);
+  }, [date, locFilter]);
 
   const statusFor = (trainerId) =>
     records.find((r) => r.trainer_id === trainerId)?.status;
@@ -504,6 +500,20 @@ function TrainerAttendance() {
           >
             <CaretRight size={14} weight="bold" />
           </button>
+          <div className="border-l border-zinc-300 pl-3">
+            <select
+              value={locFilter}
+              onChange={(e) => setLocFilter(e.target.value)}
+              className="text-xs font-semibold px-2 py-1.5 border border-zinc-300 bg-white"
+            >
+              <option value="">All Branches</option>
+              {locations.map((loc) => (
+                <option key={loc} value={loc}>
+                  {loc}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="bento p-4 flex items-center gap-4 justify-between flex-wrap">
           <div className="flex items-center gap-4">
@@ -554,6 +564,7 @@ function TrainerAttendance() {
             <thead>
               <tr className="bg-zinc-100 border-y border-zinc-200">
                 <th className="label-tag p-3 text-left">Trainer</th>
+                <th className="label-tag p-3 text-left">Branch</th>
                 <th className="label-tag p-3 text-left">Phone</th>
                 <th className="label-tag p-3 text-right">Mark</th>
               </tr>
@@ -568,6 +579,11 @@ function TrainerAttendance() {
                     data-testid={`attendance-row-${t.id}`}
                   >
                     <td className="p-3 font-semibold">{t.name}</td>
+                    <td className="p-3">
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 border border-zinc-300 text-zinc-700 bg-zinc-50 font-mono-data">
+                        {t.location || "Khajaguda"}
+                      </span>
+                    </td>
                     <td className="p-3 text-xs font-mono-data text-zinc-600">
                       {t.phone || "—"}
                     </td>

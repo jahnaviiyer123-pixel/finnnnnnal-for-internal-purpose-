@@ -107,3 +107,7 @@ credentials.json
 *.key
 .credentials
 .env*.local
+backups/
+learn-and-drive-website/
+.agents/
+

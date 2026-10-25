@@ -3,9 +3,9 @@
   "buildCommand": "npm install --prefix frontend && npm run build --prefix frontend",
   "outputDirectory": "frontend/build",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/docs", "destination": "/api" },
     { "source": "/openapi.json", "destination": "/api" },
-    { "source": "/((?!api|docs|openapi.json).*)", "destination": "/index.html" }
+    { "source": "/((?!api|docs|openapi.json|static|favicon.ico|manifest.json|logo).*)", "destination": "/index.html" }
   ]
 }

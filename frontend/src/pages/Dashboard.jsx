@@ -39,21 +39,26 @@ function Stat({ label, value, sublabel, Icon, testid }) {
 export default function Dashboard() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager";
+  const isManagerOrAdmin = isAdmin || isManager;
 
-  // State for Admin
+  // State for Admin / Manager
   const [stats, setStats] = useState(null);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [locations, setLocations] = useState([]);
+  const [selectedLocation, setSelectedLocation] = useState(user?.location || "");
 
   // State for Trainer
   const [trainerSchedule, setTrainerSchedule] = useState(null);
   const [myAttendance, setMyAttendance] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const loadAdminData = async () => {
+  const loadAdminData = async (loc = selectedLocation) => {
+    const locParam = loc ? `?location=${encodeURIComponent(loc)}` : "";
     const [s, st] = await Promise.all([
-      api.get("/dashboard/stats"),
-      api.get("/students"),
+      api.get(`/dashboard/stats${locParam}`),
+      api.get(`/students?limit=6${locParam ? `&location=${encodeURIComponent(loc)}` : ""}`),
     ]);
     setStats(s.data);
     setStudents(st.data);
@@ -62,7 +67,7 @@ export default function Dashboard() {
   const loadTrainerData = async () => {
     const today = new Date().toISOString().slice(0, 10);
     const [st, sc, att] = await Promise.all([
-      api.get("/students"),
+      api.get(`/students?trainer_id=${user.id}&status=active`),
       api.get(`/schedule/today?date=${today}`),
       api.get(`/attendance?trainer_id=${user.id}&date=${today}`),
     ]);
@@ -78,7 +83,8 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      if (isAdmin) {
+      if (isManagerOrAdmin) {
+        api.get("/locations").then((r) => setLocations(r.data)).catch(() => {});
         await loadAdminData();
       } else {
         await loadTrainerData();
@@ -94,23 +100,7 @@ export default function Dashboard() {
   useEffect(() => {
     load();
     // eslint-disable-next-line
-  }, [isAdmin]);
-
-  // Trainer attendance mark
-  const markMyAttendance = async (status) => {
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      await api.post("/attendance", { trainer_id: user.id, date: today, status });
-      toast.success(`Marked as ${status}!`);
-      // Refetch
-      const att = await api.get(`/attendance?trainer_id=${user.id}&date=${today}`);
-      if (att.data && att.data.length > 0) {
-        setMyAttendance(att.data[0]);
-      }
-    } catch (e) {
-      toast.error(e.message || "Failed to check-in");
-    }
-  };
+  }, [user?.role]);
 
   // Trainer student class attendance mark
   const markStudentClass = async (classId, status, studentName, num) => {
@@ -137,7 +127,7 @@ export default function Dashboard() {
   }
 
   // --- RENDER TRAINER DASHBOARD ---
-  if (!isAdmin) {
+  if (!isManagerOrAdmin) {
     // Process today's schedule for this trainer
     const mySessions = [];
     if (trainerSchedule) {
@@ -179,8 +169,13 @@ export default function Dashboard() {
         <div className="bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-950 text-white p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative overflow-hidden border border-zinc-800 shadow-md">
           <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-400/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
           <div className="relative z-10 space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-400 text-zinc-900 text-[10px] font-extrabold uppercase tracking-widest leading-none">
-              Trainer Portal
+            <div className="flex items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-400 text-zinc-900 text-[10px] font-extrabold uppercase tracking-widest leading-none">
+                Trainer Portal
+              </div>
+              <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-zinc-800 text-zinc-300 text-[10px] font-bold uppercase tracking-wider border border-zinc-700">
+                📍 {user.location || "Khajaguda Branch"}
+              </div>
             </div>
             <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter leading-none">
               Welcome back, {user.name}
@@ -190,9 +185,9 @@ export default function Dashboard() {
             </p>
           </div>
 
-          {/* Self check-in container */}
+          {/* Manager-marked attendance display */}
           <div className="relative z-10 bg-zinc-900/50 backdrop-blur-md border border-zinc-700/50 p-4 md:min-w-[280px]">
-            <div className="label-tag text-zinc-400 mb-2">My Attendance Status</div>
+            <div className="label-tag text-zinc-400 mb-2">My Daily Attendance</div>
             {myAttendance ? (
               <div className="flex items-center gap-3">
                 <span className={`inline-block w-3.5 h-3.5 rounded-full ${
@@ -204,28 +199,19 @@ export default function Dashboard() {
                     {myAttendance.status}
                   </div>
                   <div className="text-[10px] text-zinc-400 font-mono-data mt-0.5">
-                    Marked today at {new Date(myAttendance.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    Marked by {myAttendance.marked_by_role ? myAttendance.marked_by_role.toUpperCase() : "MANAGER"} · {new Date(myAttendance.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="space-y-2">
-                <p className="text-xs text-zinc-300">You haven't checked in yet today.</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => markMyAttendance("present")}
-                    data-testid="mark-present-btn"
-                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider transition-all"
-                  >
-                    Present
-                  </button>
-                  <button
-                    onClick={() => markMyAttendance("leave")}
-                    className="flex-1 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold uppercase tracking-wider border border-zinc-700 transition-all"
-                  >
-                    Leave
-                  </button>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-zinc-600 animate-ping" />
+                  <span className="text-xs font-semibold text-zinc-300">Pending Manager Marking</span>
                 </div>
+                <p className="text-[11px] text-zinc-400 leading-snug">
+                  Attendance is strictly marked by the branch manager upon arrival.
+                </p>
               </div>
             )}
           </div>
@@ -418,8 +404,29 @@ export default function Dashboard() {
             Live operational snapshot — students, trainers, classes, fees.
           </p>
         </div>
-        <div className="font-mono-data text-xs text-zinc-500">
-          {new Date().toDateString().toUpperCase()}
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-zinc-200 shadow-sm">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Branch:</span>
+            <select
+              value={selectedLocation}
+              onChange={(e) => {
+                const loc = e.target.value;
+                setSelectedLocation(loc);
+                loadAdminData(loc);
+              }}
+              className="text-xs font-bold text-zinc-900 bg-transparent focus:outline-none cursor-pointer"
+            >
+              <option value="">All Locations</option>
+              {locations.map((loc) => (
+                <option key={loc} value={loc}>
+                  {loc}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="font-mono-data text-xs text-zinc-500">
+            {new Date().toDateString().toUpperCase()}
+          </div>
         </div>
       </div>
 
@@ -446,6 +453,73 @@ export default function Dashboard() {
           testid="stat-classes-today"
         />
       </div>
+
+      {/* Admin Only: Financial & Revenue Cards */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          <Stat
+            label="Fees Collected"
+            value={`₹${(stats?.fees_paid ?? 0).toLocaleString("en-IN")}`}
+            sublabel="collected to date"
+            Icon={CurrencyInr}
+            testid="stat-fees-paid"
+          />
+          <Stat
+            label="Pending Dues"
+            value={`₹${(stats?.fees_pending ?? 0).toLocaleString("en-IN")}`}
+            sublabel="unpaid balances"
+            Icon={CurrencyInr}
+            testid="stat-fees-pending"
+          />
+          <Stat
+            label="Total Course Value"
+            value={`₹${(stats?.fees_total ?? 0).toLocaleString("en-IN")}`}
+            sublabel="booked tuition"
+            Icon={CurrencyInr}
+            testid="stat-fees-total"
+          />
+        </div>
+      )}
+
+      {/* Manager / Admin: Slot Notice for Students in Last 3 Days */}
+      {stats?.ending_soon_students && stats.ending_soon_students.length > 0 && (
+        <div className="mt-8 p-5 bg-amber-50 border-2 border-amber-400 shadow-[4px_4px_0_0_rgba(245,158,11,1)]" data-testid="ending-soon-slots-card">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-amber-500 text-white font-black text-xs uppercase tracking-wider">
+                Slot Notice
+              </span>
+              <h3 className="font-heading font-black text-lg text-amber-950">
+                {stats.ending_soon_students.length} Student{stats.ending_soon_students.length > 1 ? "s" : ""} in Final 3 Working Days — Slots Opening Soon
+              </h3>
+            </div>
+            <span className="text-xs text-amber-800 font-bold uppercase tracking-wider">
+              Ready to allocate new trainees to upcoming vacant slots
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {stats.ending_soon_students.map((st) => (
+              <div key={st.id} className="bg-white border border-amber-300 p-3.5 flex flex-col justify-between hover:shadow-sm transition-shadow">
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <Link to={`/students/${st.id}`} className="font-bold text-sm text-zinc-950 hover:text-blue-700">
+                      {st.name}
+                    </Link>
+                    <div className="text-xs text-zinc-500 font-mono-data mt-0.5">{st.phone}</div>
+                  </div>
+                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white">
+                    {st.classes_remaining}d left
+                  </span>
+                </div>
+                <div className="mt-3 pt-2 border-t border-amber-100 flex items-center justify-between text-xs">
+                  <span className="font-bold text-zinc-700">⏰ {st.slot_time}</span>
+                  <span className="text-zinc-500 font-mono-data">{st.classes_completed}/{st.total_classes} done</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bento p-6 lg:col-span-2" data-testid="recent-students">

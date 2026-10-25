@@ -15,6 +15,7 @@ API = f"{BASE}/api"
 
 ADMIN = {"email": "admin@ridewell.com", "password": "admin123"}
 TRAINER = {"email": "trainer@ridewell.com", "password": "trainer123"}
+MANAGER = {"email": "manager@ridewell.com", "password": "manager123"}
 
 
 # ---------- Fixtures ----------
@@ -25,6 +26,16 @@ def admin_token():
     data = r.json()
     assert "access_token" in data and "user" in data
     assert data["user"]["role"] == "admin"
+    return data["access_token"]
+
+
+@pytest.fixture(scope="session")
+def manager_token():
+    r = requests.post(f"{API}/auth/login", json=MANAGER, timeout=20)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "access_token" in data and "user" in data
+    assert data["user"]["role"] == "manager"
     return data["access_token"]
 
 
@@ -94,6 +105,15 @@ class TestTrainers:
         assert "password_hash" not in t
         assert "_id" not in t
         TestTrainers.created_id = t["id"]
+
+    def test_create_trainer_manager(self, manager_token):
+        email = f"mgr_created_{uuid.uuid4().hex[:6]}@ridewell.com"
+        body = {"email": email, "password": "pwd12345", "name": "Manager Added Trainer", "phone": "+91 88888"}
+        r = requests.post(f"{API}/trainers", json=body, headers=_ah(manager_token), timeout=20)
+        assert r.status_code == 200, r.text
+        t = r.json()
+        assert t["role"] == "trainer"
+        assert t["name"] == "Manager Added Trainer"
 
     def test_create_trainer_forbidden_for_trainer(self, trainer_token):
         body = {"email": f"TEST_x_{uuid.uuid4().hex[:5]}@x.com", "password": "p", "name": "x"}
@@ -185,6 +205,44 @@ class TestStudentsAndClasses:
         ours = [s for s in r2.json() if s["id"] == TestStudentsAndClasses.student_id][0]
         assert ours["classes_completed"] == 1
 
+    def test_trainer_can_create_student_with_12_working_days(self, trainer_token, trainer_user):
+        body = {
+            "name": "Trainer Added Student",
+            "phone": "9999911111",
+            "license_type": "geared",
+            "joining_date": date.today().isoformat(),
+            "total_classes": 12,
+        }
+        r = requests.post(f"{API}/students", json=body, headers=_ah(trainer_token), timeout=20)
+        assert r.status_code == 200, r.text
+        s = r.json()
+        assert s["name"] == "Trainer Added Student"
+        assert s["total_classes"] == 12
+
+        # Verify 12 classes were created and scheduled on working days (no Sundays)
+        rc = requests.get(f"{API}/students/{s['id']}/classes", headers=_ah(trainer_token), timeout=20)
+        assert rc.status_code == 200
+        classes = rc.json()
+        assert len(classes) == 12
+        for c in classes:
+            if c.get("scheduled_date"):
+                dt = datetime.strptime(c["scheduled_date"], "%Y-%m-%d")
+                assert dt.weekday() != 6, f"Class scheduled on Sunday: {c['scheduled_date']}"
+
+    def test_get_student_invoice(self, admin_token):
+        sid = TestStudentsAndClasses.student_id
+        r = requests.get(f"{API}/students/{sid}/invoice", headers=_ah(admin_token), timeout=20)
+        assert r.status_code == 200, r.text
+        inv = r.json()
+        assert inv["invoice_number"].startswith("RW-INV-")
+        assert "school" in inv
+        assert "student" in inv
+        assert "allotment" in inv
+        assert "schedule" in inv
+        assert "financials" in inv
+        assert "instructions" in inv
+        assert len(inv["instructions"]) > 0
+
     def test_trainer_cannot_delete_student(self, trainer_token):
         r = requests.delete(
             f"{API}/students/{TestStudentsAndClasses.student_id}",
@@ -216,6 +274,23 @@ class TestAttendance:
         recs = r3.json()
         assert any(a["trainer_id"] == trainer_user["id"] and a["date"] == today for a in recs)
 
+    def test_trainer_cannot_mark_attendance(self, trainer_token, trainer_user):
+        """Trainers must NOT be able to mark attendance for themselves or others."""
+        today = date.today().isoformat()
+        body = {"trainer_id": trainer_user["id"], "date": today, "status": "present"}
+        r = requests.post(f"{API}/attendance", json=body, headers=_ah(trainer_token), timeout=20)
+        assert r.status_code == 403, f"Expected 403 forbidden for trainer self-marking, got {r.status_code}"
+
+    def test_manager_can_mark_attendance(self, manager_token, trainer_user):
+        """Manager (subadmin) can mark attendance for trainers."""
+        today = date.today().isoformat()
+        body = {"trainer_id": trainer_user["id"], "date": today, "status": "present", "notes": "marked by manager"}
+        r = requests.post(f"{API}/attendance", json=body, headers=_ah(manager_token), timeout=20)
+        assert r.status_code == 200, r.text
+        rec = r.json()
+        assert rec["status"] == "present"
+        assert rec["marked_by_role"] == "manager"
+
 
 # ---------- Payments ----------
 class TestPayments:
@@ -234,6 +309,14 @@ class TestPayments:
 
         after = requests.get(f"{API}/students/{sid}", headers=_ah(admin_token), timeout=20).json()
         assert float(after["fees_paid"]) == pytest.approx(paid_before + 1500)
+
+    def test_payments_forbidden_for_manager(self, manager_token):
+        r = requests.get(f"{API}/payments", headers=_ah(manager_token), timeout=20)
+        assert r.status_code == 403, "Payments must be forbidden for manager"
+
+    def test_payments_forbidden_for_trainer(self, trainer_token):
+        r = requests.get(f"{API}/payments", headers=_ah(trainer_token), timeout=20)
+        assert r.status_code == 403, "Payments must be forbidden for trainer"
 
 
 # ---------- Dashboard / Reports ----------
@@ -260,6 +343,133 @@ class TestDashboardAndReports:
         assert isinstance(rep["attendance"], list)
         assert isinstance(rep["payments"], list)
         assert any(p.get("amount") == 1500 for p in rep["payments"])
+
+    def test_weekly_report_summary_admin(self, admin_token):
+        r = requests.get(f"{API}/reports/summary?period=weekly&location=Khajaguda", headers=_ah(admin_token), timeout=20)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["period"] == "weekly"
+        assert data["location"] == "Khajaguda"
+        assert "summary" in data
+        assert "classes_conducted" in data["summary"]
+        assert "new_enrollments" in data["summary"]
+        assert "trainer_performance" in data
+        assert isinstance(data["trainer_performance"], list)
+        # Admin can view total fees collected
+        assert "total_fees_collected" in data["summary"]
+        assert "payments" in data
+
+    def test_weekly_report_summary_manager(self, manager_token):
+        r = requests.get(f"{API}/reports/summary?period=weekly", headers=_ah(manager_token), timeout=20)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["period"] == "weekly"
+        # Manager fees must NOT be exposed
+        assert data["summary"]["total_fees_collected"] is None
+        assert data["payments"] == []
+
+    def test_monthly_report_summary(self, admin_token):
+        r = requests.get(f"{API}/reports/summary?period=monthly", headers=_ah(admin_token), timeout=20)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["period"] == "monthly"
+        assert "daily_progression" in data
+
+
+# ---------- Locations & Multi-Location Isolation ----------
+class TestLocationsAndLocationIsolation:
+    def test_list_locations(self, admin_token):
+        r = requests.get(f"{API}/locations", headers=_ah(admin_token), timeout=20)
+        assert r.status_code == 200
+        locs = r.json()
+        assert isinstance(locs, list)
+        assert "Khajaguda" in locs
+
+    def test_trainer_cannot_access_student_outside_location(self, trainer_token, admin_token):
+        # Admin creates student in a different location (Kondapur)
+        body = {
+            "name": "Kondapur Student",
+            "phone": "+91 99999 88888",
+            "joining_date": date.today().isoformat(),
+            "location": "Kondapur",
+            "total_classes": 10,
+        }
+        r = requests.post(f"{API}/students", json=body, headers=_ah(admin_token), timeout=20)
+        assert r.status_code == 200
+        kondapur_student_id = r.json()["id"]
+
+        try:
+            # Trainer (in Khajaguda) tries to access Kondapur student directly -> 403 Forbidden
+            r_trainer = requests.get(f"{API}/students/{kondapur_student_id}", headers=_ah(trainer_token), timeout=20)
+            assert r_trainer.status_code in (403, 404), f"Expected 403 or 404 for cross-location access, got {r_trainer.status_code}"
+            
+            # Trainer listing students does not see Kondapur student
+            r_list = requests.get(f"{API}/students", headers=_ah(trainer_token), timeout=20)
+            assert r_list.status_code == 200
+            student_ids = [s["id"] for s in r_list.json()]
+            assert kondapur_student_id not in student_ids
+        finally:
+            # Cleanup test student
+            requests.delete(f"{API}/students/{kondapur_student_id}", headers=_ah(admin_token), timeout=20)
+
+
+# ---------- Holidays, Functions & Calendar ----------
+class TestHolidaysAndCalendar:
+    holiday_id = None
+    holiday_date = "2026-12-25"
+
+    def test_compute_working_days_skips_sundays_and_holidays(self):
+        from server import compute_working_days
+        # Start on Friday 2026-10-30:
+        # Friday (10-30): Day 1
+        # Saturday (10-31): Day 2
+        # Sunday (11-01): SKIPPED (Sunday)
+        # Monday (11-02): declared holiday -> SKIPPED
+        # Tuesday (11-03): Day 3
+        hols = {"2026-11-02"}
+        days = compute_working_days("2026-10-30", 3, holiday_dates=hols)
+        assert days == ["2026-10-30", "2026-10-31", "2026-11-03"], f"Unexpected working days: {days}"
+
+    def test_manager_can_create_holiday(self, manager_token):
+        body = {
+            "date": TestHolidaysAndCalendar.holiday_date,
+            "title": "Christmas Holiday",
+            "type": "holiday",
+            "notes": "Driving school closed for Christmas",
+        }
+        r = requests.post(f"{API}/holidays", json=body, headers=_ah(manager_token), timeout=20)
+        assert r.status_code == 200, r.text
+        doc = r.json()
+        assert doc["date"] == TestHolidaysAndCalendar.holiday_date
+        assert doc["title"] == "Christmas Holiday"
+        TestHolidaysAndCalendar.holiday_id = doc["id"]
+
+    def test_trainer_cannot_create_holiday(self, trainer_token):
+        body = {
+            "date": "2026-12-26",
+            "title": "Boxing Day",
+            "type": "holiday",
+        }
+        r = requests.post(f"{API}/holidays", json=body, headers=_ah(trainer_token), timeout=20)
+        assert r.status_code == 403
+
+    def test_list_holidays(self, trainer_token):
+        r = requests.get(f"{API}/holidays?year=2026&month=12", headers=_ah(trainer_token), timeout=20)
+        assert r.status_code == 200
+        hols = r.json()
+        assert any(h["date"] == TestHolidaysAndCalendar.holiday_date for h in hols)
+
+    def test_schedule_today_returns_holiday_info(self, trainer_token):
+        r = requests.get(f"{API}/schedule/today?date={TestHolidaysAndCalendar.holiday_date}", headers=_ah(trainer_token), timeout=20)
+        assert r.status_code == 200
+        res = r.json()
+        assert res.get("holiday") is not None
+        assert res["holiday"]["title"] == "Christmas Holiday"
+
+    def test_delete_holiday(self, manager_token):
+        if TestHolidaysAndCalendar.holiday_id:
+            r = requests.delete(f"{API}/holidays/{TestHolidaysAndCalendar.holiday_id}", headers=_ah(manager_token), timeout=20)
+            assert r.status_code == 200
 
 
 # ---------- Cleanup ----------

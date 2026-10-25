@@ -15,6 +15,7 @@ import Attendance from "@/pages/Attendance";
 import Payments from "@/pages/Payments";
 import Schedule from "@/pages/Schedule";
 import Slots from "@/pages/Slots";
+import Reports from "@/pages/Reports";
 
 function AdminRoute({ children }) {
   const { user, ready } = useAuth();
@@ -26,6 +27,21 @@ function AdminRoute({ children }) {
     );
   }
   if (!user || user.role !== "admin") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
+function ManagerOrAdminRoute({ children }) {
+  const { user, ready } = useAuth();
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <div className="label-tag animate-pulse">Loading…</div>
+      </div>
+    );
+  }
+  if (!user || (user.role !== "admin" && user.role !== "manager")) {
     return <Navigate to="/dashboard" replace />;
   }
   return children;
@@ -46,9 +62,10 @@ function App() {
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/students" element={<Students />} />
               <Route path="/students/:id" element={<StudentDetail />} />
-              <Route path="/trainers" element={<AdminRoute><Trainers /></AdminRoute>} />
-              <Route path="/trainers/:id" element={<AdminRoute><TrainerDetail /></AdminRoute>} />
+              <Route path="/trainers" element={<ManagerOrAdminRoute><Trainers /></ManagerOrAdminRoute>} />
+              <Route path="/trainers/:id" element={<ManagerOrAdminRoute><TrainerDetail /></ManagerOrAdminRoute>} />
               <Route path="/attendance" element={<Attendance />} />
+              <Route path="/reports" element={<ManagerOrAdminRoute><Reports /></ManagerOrAdminRoute>} />
               <Route path="/payments" element={<AdminRoute><Payments /></AdminRoute>} />
               <Route path="/slots" element={<AdminRoute><Slots /></AdminRoute>} />
             </Route>

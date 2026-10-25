@@ -31,40 +31,59 @@ export default function Trainers() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", photo_url: null });
+  const [locations, setLocations] = useState(["Khajaguda", "Manikonda", "Kondapur"]);
+  const [selectedLocation, setSelectedLocation] = useState(user?.role === "admin" ? "" : (user?.location || "Khajaguda"));
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", photo_url: null, location: user?.location || "Khajaguda" });
 
   const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager";
+  const isManagerOrAdmin = isAdmin || isManager;
 
-  const load = async () => {
-    if (isAdmin) {
+  const load = async (loc = selectedLocation) => {
+    const locParam = loc ? `&location=${loc}` : "";
+    const baseLocParam = loc ? `?location=${loc}` : "";
+    if (isManagerOrAdmin) {
       const [a, p] = await Promise.all([
-        api.get("/trainers?status=active"),
-        api.get("/trainers?status=pending"),
+        api.get(`/trainers?status=active${locParam}`),
+        api.get(`/trainers?status=pending${locParam}`),
       ]);
       setActive(a.data);
       setPending(p.data);
     } else {
-      const a = await api.get("/trainers");
+      const a = await api.get(`/trainers${baseLocParam}`);
       setActive(a.data);
     }
   };
 
   useEffect(() => {
     (async () => {
-      try { await load(); } finally { setLoading(false); }
+      try {
+        const locRes = await api.get("/locations").catch(() => null);
+        if (locRes?.data && Array.isArray(locRes.data) && locRes.data.length > 0) {
+          setLocations(locRes.data);
+        }
+        await load();
+      } finally {
+        setLoading(false);
+      }
     })();
     // eslint-disable-next-line
   }, []);
 
+  const handleLocationChange = (newLoc) => {
+    setSelectedLocation(newLoc);
+    load(newLoc);
+  };
+
   const openNew = () => {
     setEditId(null);
-    setForm({ name: "", email: "", phone: "", password: "", photo_url: null });
+    setForm({ name: "", email: "", phone: "", password: "", photo_url: null, location: selectedLocation || user?.location || "Khajaguda" });
     setOpen(true);
   };
 
   const openEdit = (t) => {
     setEditId(t.id);
-    setForm({ name: t.name, email: t.email, phone: t.phone || "", password: "", photo_url: t.photo_url || null });
+    setForm({ name: t.name, email: t.email, phone: t.phone || "", password: "", photo_url: t.photo_url || null, location: t.location || "Khajaguda" });
     setOpen(true);
   };
 
@@ -72,14 +91,13 @@ export default function Trainers() {
     e.preventDefault();
     try {
       if (editId) {
-        const payload = { name: form.name, phone: form.phone, photo_url: form.photo_url };
+        const payload = { name: form.name, phone: form.phone, photo_url: form.photo_url, location: form.location || "Khajaguda" };
         if (form.password) payload.password = form.password;
         await api.patch(`/trainers/${editId}`, payload);
         toast.success("Trainer updated");
       } else {
-        await api.post("/trainers", { name: form.name, email: form.email, phone: form.phone, password: form.password });
+        await api.post("/trainers", { name: form.name, email: form.email, phone: form.phone, password: form.password, location: form.location || "Khajaguda" });
         if (form.photo_url) {
-          // best-effort patch photo on the new trainer (need id) — refetch then patch
           const list = await api.get("/trainers?status=active");
           const created = list.data.find((u) => u.email === form.email.toLowerCase());
           if (created) {
@@ -138,18 +156,40 @@ export default function Trainers() {
             Trainers
           </h1>
         </div>
-        {isAdmin && (
-          <button
-            onClick={openNew}
-            data-testid="new-trainer-btn"
-            className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3 transition-colors"
-          >
-            <Plus size={14} weight="bold" /> Add trainer
-          </button>
-        )}
+        <div className="flex items-center gap-3 flex-wrap">
+          {isManagerOrAdmin ? (
+            <div className="flex items-center gap-2 bg-white border border-zinc-300 px-3 py-2">
+              <span className="label-tag text-[10px]">Branch:</span>
+              <select
+                value={selectedLocation}
+                onChange={(e) => handleLocationChange(e.target.value)}
+                className="bg-transparent text-xs font-bold uppercase tracking-wider outline-none cursor-pointer"
+                data-testid="trainer-branch-filter"
+              >
+                {isAdmin && <option value="">All Branches</option>}
+                {locations.map((loc) => (
+                  <option key={loc} value={loc}>{loc} Branch</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold uppercase tracking-wider">
+              <span>📍 {user?.location || "Khajaguda"} Branch</span>
+            </div>
+          )}
+          {isManagerOrAdmin && (
+            <button
+              onClick={openNew}
+              data-testid="new-trainer-btn"
+              className="inline-flex items-center gap-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-[0.2em] px-5 py-3 transition-colors"
+            >
+              <Plus size={14} weight="bold" /> Add trainer
+            </button>
+          )}
+        </div>
       </div>
 
-      {isAdmin && (
+      {isManagerOrAdmin && (
         <div className="flex items-center gap-1 mb-6 border-b border-zinc-200" data-testid="trainer-tabs">
           <button
             onClick={() => setTab("active")}
@@ -206,18 +246,26 @@ export default function Trainers() {
                     )}
                   </div>
                 </Link>
-                {isAdmin && tab === "active" && (
+                {isManagerOrAdmin && tab === "active" && (
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button onClick={() => openEdit(t)} className="p-1.5 hover:bg-zinc-100" data-testid={`edit-trainer-${t.id}`}>
                       <PencilSimple size={14} weight="bold" />
                     </button>
-                    <button onClick={() => remove(t.id)} className="p-1.5 hover:bg-red-600 hover:text-white">
-                      <Trash size={14} weight="bold" />
-                    </button>
+                    {isAdmin && (
+                      <button onClick={() => remove(t.id)} className="p-1.5 hover:bg-red-600 hover:text-white">
+                        <Trash size={14} weight="bold" />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
               <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4">
+                <div className="flex justify-between text-xs items-center">
+                  <span className="label-tag">Branch</span>
+                  <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200">
+                    {t.location || "Khajaguda"}
+                  </span>
+                </div>
                 <div className="flex justify-between text-xs">
                   <span className="label-tag">Email</span>
                   <span className="font-mono-data truncate ml-2">{t.email}</span>
@@ -227,7 +275,7 @@ export default function Trainers() {
                   <span className="font-mono-data">{t.phone || "—"}</span>
                 </div>
               </div>
-              {isAdmin && tab === "pending" && (
+              {isManagerOrAdmin && tab === "pending" && (
                 <div className="mt-4 flex items-center gap-2">
                   <button
                     onClick={() => approve(t.id)}
@@ -273,6 +321,19 @@ export default function Trainers() {
               <div>
                 <div className="label-tag mb-1.5">Full name</div>
                 <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border border-zinc-300 px-3 py-2 text-sm" data-testid="trainer-name-input" />
+              </div>
+              <div>
+                <div className="label-tag mb-1.5">Branch Location</div>
+                <select
+                  value={form.location || "Khajaguda"}
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  className="w-full border border-zinc-300 px-3 py-2 text-sm bg-white"
+                  data-testid="trainer-location-select"
+                >
+                  <option value="Khajaguda">Khajaguda</option>
+                  <option value="Manikonda">Manikonda</option>
+                  <option value="Kondapur">Kondapur</option>
+                </select>
               </div>
               <div>
                 <div className="label-tag mb-1.5">Email</div>

@@ -9,7 +9,9 @@ import {
   PencilSimple,
   Trash,
   FloppyDisk,
+  FileText,
 } from "@phosphor-icons/react";
+import InvoiceModal from "@/components/InvoiceModal";
 import { toast } from "sonner";
 
 function RecordPaymentDialog({ open, onClose, students, onCreated }) {
@@ -186,10 +188,14 @@ export default function Payments() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [selectedInvoiceStudentId, setSelectedInvoiceStudentId] = useState(null);
 
   const load = async () => {
     try {
-      const [p, s] = await Promise.all([api.get("/payments"), api.get("/students")]);
+      const [p, s] = await Promise.all([
+        api.get("/payments"),
+        api.get("/students?include_classes=false"),
+      ]);
       setPayments(p.data);
       setStudents(s.data);
     } catch (e) {
@@ -398,6 +404,14 @@ export default function Payments() {
                                 </div>
                               ) : (
                                 <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    onClick={() => setSelectedInvoiceStudentId(p.student_id)}
+                                    title="View Admission Slip & Bill Receipt"
+                                    data-testid={`view-invoice-${p.id}`}
+                                    className="p-1.5 text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100 border border-zinc-200"
+                                  >
+                                    <FileText size={12} weight="bold" />
+                                  </button>
                                   <button onClick={() => startEdit(p)}
                                     title="Edit"
                                     className="p-1.5 text-zinc-500 hover:bg-zinc-100 border border-zinc-200">
@@ -472,6 +486,13 @@ export default function Payments() {
         onClose={() => setOpen(false)}
         students={students}
         onCreated={() => load()}
+      />
+
+      {/* Official Admission Slip & Invoice Modal */}
+      <InvoiceModal
+        studentId={selectedInvoiceStudentId}
+        open={Boolean(selectedInvoiceStudentId)}
+        onClose={() => setSelectedInvoiceStudentId(null)}
       />
     </div>
   );
