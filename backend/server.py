@@ -15,6 +15,7 @@ from datetime import datetime, timezone, timedelta, date
 from typing import List, Optional, Literal
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
+from fastapi.responses import FileResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
@@ -41,6 +42,13 @@ try:
         sync_all_active_students_to_sheet,
         is_sheets_sync_enabled
     )
+    from backend.notion_service import (
+        sync_student_to_notion,
+        sync_all_students_to_notion,
+        get_notion_config,
+        is_notion_configured,
+        clean_database_id
+    )
 except ImportError:
     from email_service import (
         send_smtp_email,
@@ -61,6 +69,13 @@ except ImportError:
         sync_student_to_google_sheet,
         sync_all_active_students_to_sheet,
         is_sheets_sync_enabled
+    )
+    from notion_service import (
+        sync_student_to_notion,
+        sync_all_students_to_notion,
+        get_notion_config,
+        is_notion_configured,
+        clean_database_id
     )
 
 
@@ -1040,6 +1055,8 @@ async def create_student(body: StudentCreate, user: dict = Depends(get_current_u
             if tr_user:
                 trainer_name = tr_user.get("name", "Unassigned")
         asyncio.create_task(asyncio.to_thread(sync_student_to_google_sheet, dict(doc), trainer_name))
+        # 5. Sync student record to Notion in parallel
+        asyncio.create_task(asyncio.to_thread(sync_student_to_notion, dict(doc), trainer_name))
     except Exception as mail_err:
         logger.warning("Non-blocking background email/marketing/sheets/n8n error for student %s: %s", sid, mail_err)
 
@@ -2192,6 +2209,79 @@ async def daily_report(
         payments = await db.payments.find(pq, {"_id": 0}).to_list(500)
 
     return {"date": day, "location": target_loc, "classes": classes, "attendance": attendance, "payments": payments}
+
+
+@api.get("/reports/export-archive-excel")
+async def export_archive_excel(user: dict = Depends(get_current_user)):
+    """Downloads the complete historical archive Excel file containing 245+ completed students,
+    2,687+ completed classes, and payment logs.
+    """
+    if user.get("role") not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin or Manager role required")
+    archive_path = ROOT_DIR / "LearnAndDrive_Historical_Archive.xlsx"
+    if not archive_path.exists():
+        desktop_path = Path("/Users/harsha/Desktop/LearnAndDrive_Historical_Archive_2026-10-25.xlsx")
+        if desktop_path.exists():
+            archive_path = desktop_path
+        else:
+            raise HTTPException(status_code=404, detail="Archive excel file not found")
+    return FileResponse(
+        path=str(archive_path),
+        filename="LearnAndDrive_Historical_Archive_2026-10-25.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# ---------- Notion Database Integration API Endpoints ----------
+
+class NotionConfigRequest(BaseModel):
+    api_key: str
+    database_id: str
+
+@api.get("/notion/status")
+async def get_notion_status(user: dict = Depends(get_current_user)):
+    """Returns Notion connection status and masked credentials."""
+    cfg = get_notion_config()
+    api_key = cfg.get("api_key") or ""
+    db_id = cfg.get("database_id") or ""
+    masked_key = f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else ("Configured" if api_key else "")
+    return {
+        "configured": bool(api_key and db_id),
+        "api_key_masked": masked_key,
+        "database_id": db_id,
+    }
+
+@api.post("/notion/config")
+async def save_notion_config(req: NotionConfigRequest, user: dict = Depends(get_current_user)):
+    """Saves Notion Integration API Key & Database ID into MongoDB settings."""
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    clean_db = clean_database_id(req.database_id)
+    await db.settings.update_one(
+        {"key": "notion_sync"},
+        {
+            "$set": {
+                "key": "notion_sync",
+                "api_key": req.api_key.strip(),
+                "database_id": clean_db,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+        upsert=True
+    )
+    return {"ok": True, "message": "Notion settings saved successfully", "database_id": clean_db}
+
+@api.post("/notion/sync-all")
+async def sync_all_to_notion(include_old: bool = False, user: dict = Depends(get_current_user)):
+    """Pushes all students to Notion database."""
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    result = await asyncio.to_thread(sync_all_students_to_notion, include_old)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Notion sync failed"))
+    return result
+
+
 
 
 # ---------- Hostinger Email & Marketing API Endpoints ----------

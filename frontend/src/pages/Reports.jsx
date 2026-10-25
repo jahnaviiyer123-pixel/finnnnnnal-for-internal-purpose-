@@ -19,8 +19,10 @@ import {
   Sparkle,
   FileText,
   FloppyDisk,
+  FileXls,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { downloadMasterArchiveExcel } from "@/lib/exportUtils";
 
 export default function Reports() {
   const { user } = useAuth();
@@ -175,6 +177,18 @@ export default function Reports() {
               </div>
             )}
           </div>
+
+          {isManagerOrAdmin && (
+            <button
+              onClick={downloadMasterArchiveExcel}
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs font-bold uppercase tracking-wider transition-colors"
+              title="Download the full historical archive Excel file (245+ completed students, 2,687+ classes, payments)"
+              data-testid="reports-download-archive-btn"
+            >
+              <FileXls size={15} weight="bold" className="text-blue-700" />
+              <span>Full Archive (.xlsx)</span>
+            </button>
+          )}
 
           <button
             onClick={loadReport}
@@ -621,114 +635,186 @@ export default function Reports() {
             </div>
           )}
 
-          {isAdmin && <GoogleSheetsCard />}
+          {isAdmin && <NotionSyncCard />}
         </div>
       )}
     </div>
   );
 }
 
-function GoogleSheetsCard() {
-  const [url, setUrl] = useState("");
-  const [configured, setConfigured] = useState(false);
+function NotionSyncCard() {
+  const [apiKey, setApiKey] = useState("");
+  const [databaseId, setDatabaseId] = useState("");
+  const [status, setStatus] = useState({ configured: false, api_key_masked: "", database_id: "" });
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncingAll, setSyncingAll] = useState(false);
 
   useEffect(() => {
     api
-      .get("/settings/google-sheet")
+      .get("/notion/status")
       .then((res) => {
-        setConfigured(res.data.configured);
-        setUrl(res.data.webhook_url || "");
+        setStatus(res.data);
+        if (res.data.database_id) setDatabaseId(res.data.database_id);
       })
       .catch(() => {});
   }, []);
 
-  const saveUrl = async (e) => {
+  const saveConfig = async (e) => {
     e.preventDefault();
+    if (!apiKey && !status.configured) {
+      toast.error("Please enter your Notion Integration Secret (starts with secret_ or ntn_)");
+      return;
+    }
     setSaving(true);
     try {
-      await api.post("/settings/google-sheet", { webhook_url: url });
-      toast.success("Google Sheets Webhook URL saved");
-      setConfigured(Boolean(url.trim()));
+      const res = await api.post("/notion/config", {
+        api_key: apiKey || status.api_key_masked,
+        database_id: databaseId,
+      });
+      toast.success(res.data.message || "Notion configuration saved!");
+      setStatus({
+        configured: true,
+        api_key_masked: apiKey ? `${apiKey.slice(0, 8)}...` : status.api_key_masked,
+        database_id: res.data.database_id || databaseId,
+      });
     } catch (err) {
-      toast.error(err.message || "Failed to save webhook URL");
+      toast.error(err.response?.data?.detail || err.message || "Failed to save Notion settings");
     } finally {
       setSaving(false);
     }
   };
 
-  const syncAll = async () => {
-    setSyncing(true);
+  const handleSync = async (includeOld = false) => {
+    const isFull = includeOld;
+    if (isFull) setSyncingAll(true);
+    else setSyncing(true);
+
     try {
-      const res = await api.post("/settings/google-sheet/sync-all");
+      const res = await api.post(`/notion/sync-all?include_old=${isFull}`);
       if (res.data.ok) {
-        toast.success(res.data.message || "Active students synced to Google Sheet!");
+        toast.success(res.data.message || "Students synced to Notion successfully!");
       } else {
-        toast.error(res.data.error || "Sync failed. Check Webhook URL.");
+        toast.error(res.data.error || "Sync failed. Check your Notion database permissions.");
       }
     } catch (err) {
-      toast.error(err.message || "Failed to sync to Google Sheet");
+      toast.error(err.response?.data?.detail || err.message || "Failed to sync with Notion");
     } finally {
-      setSyncing(false);
+      if (isFull) setSyncingAll(false);
+      else setSyncing(false);
     }
   };
 
   return (
-    <div className="bento p-6 bg-white shadow-sm mt-8 border border-zinc-200" data-testid="google-sheets-card">
+    <div className="bento p-6 bg-white shadow-sm mt-8 border border-zinc-200" data-testid="notion-sync-card">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <FileText size={20} weight="bold" className="text-emerald-700" />
-          <h3 className="font-heading text-xl font-bold tracking-tight">Google Sheets Real-Time Sync</h3>
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded bg-zinc-900 text-white flex items-center justify-center font-black font-heading text-lg">
+            N
+          </div>
+          <div>
+            <h3 className="font-heading text-xl font-bold tracking-tight">Notion Database Sync</h3>
+            <p className="text-[11px] text-zinc-500">Fast, visual, zero-hassle student roster in your private Notion workspace</p>
+          </div>
         </div>
         <span
           className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 font-bold uppercase tracking-wider border ${
-            configured
+            status.configured
               ? "bg-emerald-50 text-emerald-800 border-emerald-300"
               : "bg-amber-50 text-amber-900 border-amber-300"
           }`}
         >
-          {configured ? "🟢 Connected & Syncing" : "🟡 Not Connected"}
+          {status.configured ? "🟢 Connected & Auto-Syncing" : "⚪ Not Connected"}
         </span>
       </div>
 
-      <p className="text-xs text-zinc-600 mb-4">
-        Every new student enrolled is automatically added into your Google Sheet in parallel. Paste your Google Apps Script Web App URL below:
-      </p>
+      {/* 30-sec Setup Guide */}
+      <div className="bg-zinc-50 border border-zinc-200 p-3.5 mb-5 text-xs text-zinc-700 leading-relaxed">
+        <div className="font-bold uppercase tracking-wider text-[11px] text-zinc-900 mb-1.5">⚡ 3-Step Notion Setup:</div>
+        <ol className="list-decimal list-inside space-y-1 text-zinc-600 text-[11.5px]">
+          <li>
+            Open{" "}
+            <a href="https://www.notion.so/my-integrations" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">
+              notion.so/my-integrations ↗
+            </a>{" "}
+            → Click <strong>&quot;+ New integration&quot;</strong> → Name it <em>&quot;Learn &amp; Drive&quot;</em> → Copy the <strong>Internal Integration Secret</strong>.
+          </li>
+          <li>
+            In your Notion app, open your target Database page → Click <strong>&quot;…&quot;</strong> (top right) → <strong>Connections / Connect to</strong> → Select your new <em>&quot;Learn &amp; Drive&quot;</em> integration.
+          </li>
+          <li>
+            Copy the Notion Database link/ID and paste both fields below:
+          </li>
+        </ol>
+      </div>
 
-      <form onSubmit={saveUrl} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
-        <input
-          type="url"
-          required
-          placeholder="https://script.google.com/macros/s/.../exec"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          className="flex-1 border border-zinc-300 px-3 py-2 text-xs font-mono-data focus:outline-none focus:border-zinc-900"
-        />
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
-        >
-          <FloppyDisk size={14} weight="bold" />
-          {saving ? "Saving…" : "Save URL"}
-        </button>
+      <form onSubmit={saveConfig} className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-1">
+            Notion Integration Secret ({status.configured && status.api_key_masked ? `Current: ${status.api_key_masked}` : "secret_..."})
+          </label>
+          <input
+            type="password"
+            placeholder={status.configured ? "••••••••••••••••••••••••••••••••" : "secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            className="w-full border border-zinc-300 px-3 py-2 text-xs font-mono-data focus:outline-none focus:border-zinc-900"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-1">
+            Notion Database ID or URL
+          </label>
+          <input
+            type="text"
+            required
+            placeholder="e.g. 19e24867451240ff8f67389146ec7621 or full page URL"
+            value={databaseId}
+            onChange={(e) => setDatabaseId(e.target.value)}
+            className="w-full border border-zinc-300 px-3 py-2 text-xs font-mono-data focus:outline-none focus:border-zinc-900"
+          />
+        </div>
+
+        <div className="md:col-span-2 flex items-center justify-end">
+          <button
+            type="submit"
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+          >
+            <FloppyDisk size={14} weight="bold" />
+            {saving ? "Saving…" : "Save Notion Settings"}
+          </button>
+        </div>
       </form>
 
       <div className="flex items-center justify-between pt-4 border-t border-zinc-100 flex-wrap gap-3">
         <div className="text-[11px] text-zinc-500 font-mono-data">
-          Target Account: <span className="font-bold text-zinc-700">learnanddrive2@gmail.com</span>
+          {status.configured ? "✅ Every new enrollment will automatically push to your Notion Database" : "Enter keys above to activate automatic sync"}
         </div>
-        <button
-          type="button"
-          onClick={syncAll}
-          disabled={syncing || !configured}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Push all 45 current active students into Google Sheet"
-        >
-          <ArrowClockwise size={13} weight="bold" className={syncing ? "animate-spin" : ""} />
-          {syncing ? "Syncing Students…" : "Sync All Active Students to Sheet Now"}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => handleSync(false)}
+            disabled={syncing || !status.configured}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Push current 45 active students to Notion"
+          >
+            <ArrowClockwise size={13} weight="bold" className={syncing ? "animate-spin" : ""} />
+            {syncing ? "Syncing Active…" : "Sync Active Students"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSync(true)}
+            disabled={syncingAll || !status.configured}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Push ALL active and completed historical students into Notion"
+          >
+            <ArrowClockwise size={13} weight="bold" className={syncingAll ? "animate-spin" : ""} />
+            {syncingAll ? "Syncing All…" : "Sync All (Active + Archive)"}
+          </button>
+        </div>
       </div>
     </div>
   );

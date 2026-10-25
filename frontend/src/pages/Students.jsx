@@ -11,10 +11,14 @@ import {
   Archive,
   Trash,
   Copy,
+  FileCsv,
+  FileXls,
+  DownloadSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import PhotoUploader from "@/components/PhotoUploader";
 import CopyButton from "@/components/CopyButton";
+import { exportStudentsToCsv, downloadMasterArchiveExcel } from "@/lib/exportUtils";
 import { API } from "@/lib/api";
 
 function StudentAvatar({ url, name }) {
@@ -618,23 +622,52 @@ export default function Students() {
         />
         <div className="flex items-center gap-2 flex-wrap">
           {filtered.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const numbers = Array.from(new Set(filtered.map((s) => s.phone).filter(Boolean)));
+                  if (numbers.length === 0) {
+                    toast.error("No phone numbers to copy");
+                    return;
+                  }
+                  navigator.clipboard.writeText(numbers.join(", "));
+                  toast.success(`Copied ${numbers.length} student phone numbers to clipboard!`);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-300 transition-colors"
+                title="Copy all visible student phone numbers (comma-separated)"
+                data-testid="copy-all-phones-btn"
+              >
+                <Copy size={13} weight="bold" />
+                <span>Copy All Numbers ({filtered.filter((s) => s.phone).length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const prefix = tab === "active" ? "LearnAndDrive_Active_Students" : "LearnAndDrive_Old_Students";
+                  exportStudentsToCsv(filtered, prefix);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition-colors"
+                title="Export visible students to Excel / CSV file"
+                data-testid="export-excel-btn"
+              >
+                <FileCsv size={14} weight="bold" className="text-emerald-700" />
+                <span>Export to Excel ({filtered.length})</span>
+              </button>
+            </>
+          )}
+
+          {isManagerOrAdmin && (
             <button
               type="button"
-              onClick={() => {
-                const numbers = Array.from(new Set(filtered.map((s) => s.phone).filter(Boolean)));
-                if (numbers.length === 0) {
-                  toast.error("No phone numbers to copy");
-                  return;
-                }
-                navigator.clipboard.writeText(numbers.join(", "));
-                toast.success(`Copied ${numbers.length} student phone numbers to clipboard!`);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-300 transition-colors"
-              title="Copy all visible student phone numbers (comma-separated)"
-              data-testid="copy-all-phones-btn"
+              onClick={downloadMasterArchiveExcel}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 transition-colors"
+              title="Download the full comprehensive historical archive Excel file (all 245+ old students, 2,687+ classes & payments)"
+              data-testid="download-master-archive-btn"
             >
-              <Copy size={13} weight="bold" />
-              <span>Copy All Numbers ({filtered.filter((s) => s.phone).length})</span>
+              <FileXls size={14} weight="bold" className="text-blue-700" />
+              <span>Full Archive (.xlsx)</span>
             </button>
           )}
           <div className="label-tag whitespace-nowrap">{filtered.length} records</div>
