@@ -1131,10 +1131,21 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
         f"ALLOTTED TRAINER CONTACT: Your primary driving instructor is {assigned_trainer.get('name') if assigned_trainer else 'Assigned Instructor'} ({assigned_trainer.get('phone') if assigned_trainer else 'Branch Reception'}). Call directly for day-of pickup or vehicle coordination.",
     ]
 
+    # Look up manager for this branch
+    manager_doc = await db.users.find_one({"role": "manager", "location": branch_location}, {"_id": 0, "password_hash": 0})
+    if not manager_doc:
+        manager_doc = await db.users.find_one({"role": "manager"}, {"_id": 0, "password_hash": 0})
+
     return {
         "invoice_number": invoice_number,
         "date": date.today().isoformat(),
         "created_at": s.get("created_at") or _now_iso(),
+        "manager": {
+            "name": manager_doc.get("name") if manager_doc else "Branch Manager",
+            "phone": manager_doc.get("phone") if manager_doc else "+91 98765 43211",
+            "email": manager_doc.get("email") if manager_doc else "manager@ridewell.com",
+            "location": branch_location,
+        },
         "school": {
             "name": "RideWell Motor Driving School",
             "tagline": "Govt. Authorized Motor Driving Training Institution",

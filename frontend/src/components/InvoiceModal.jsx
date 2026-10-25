@@ -12,6 +12,7 @@ import {
   FileText,
   MapPin,
   Phone,
+  Copy,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -39,54 +40,77 @@ export default function InvoiceModal({ studentId, open, onClose }) {
     window.print();
   };
 
-  const handleShareWhatsApp = () => {
-    if (!data) return;
-    const phone = data.student.phone?.replace(/[^0-9]/g, "");
-    if (!phone) {
-      toast.error("Student phone number not available for WhatsApp sharing");
-      return;
-    }
-
-    const targetPhone = phone.length === 10 ? `91${phone}` : phone;
-    const trainerInfo = data.allotment.assigned_trainer?.name
-      ? `${data.allotment.assigned_trainer.name} (${data.allotment.assigned_trainer.phone})`
+  const generateMessage = () => {
+    if (!data) return "";
+    const trainerInfo = data.allotment?.assigned_trainer?.name
+      ? `${data.allotment.assigned_trainer.name} (${data.allotment.assigned_trainer.phone || "Branch"})`
       : "Assigned at Branch";
 
-    const scheduleList = data.schedule
+    const scheduleList = (data.schedule || [])
       .slice(0, 12)
       .map((c) => `• Class ${c.class_number}: ${c.scheduled_date || "TBD"}`)
       .join("\n");
 
-    const message = `*RIDEWELL MOTOR DRIVING SCHOOL*
+    return `*RIDEWELL MOTOR DRIVING SCHOOL*
 *Official Admission Slip & Training Invoice*
 ----------------------------------------
 *Invoice No:* ${data.invoice_number}
-*Student:* ${data.student.name}
-*Course:* 12 Working Days Training (${data.student.license_type?.toUpperCase()})
-*Branch:* ${data.school.branch}
+*Student:* ${data.student?.name}
+*Phone:* ${data.student?.phone}
+*Branch:* ${data.school?.branch}
+*Course:* 12 Working Days Training (${data.student?.license_type?.toUpperCase()})
 
 *TRAINING ALLOTMENT:*
-• *Allotted Slot Time:* ${formatSlot12(data.allotment.slot_hour)}
+• *Allotted Slot Time:* ${formatSlot12(data.allotment?.slot_hour)}
 • *Allotted Instructor:* ${trainerInfo}
-${data.student.needs_pickup ? `• *Pickup Address:* ${data.student.pickup_address || "Provided"}\n` : ""}
+${data.student?.needs_pickup ? `• *Pickup Address:* ${data.student.pickup_address || "Provided"}\n` : ""}
 *12 WORKING DAYS SCHEDULE:*
 ${scheduleList}
 
 *FEE RECEIPT:*
-• *Total Fees:* ₹${data.financials.fees_total?.toLocaleString("en-IN")}
-• *Fees Paid:* ₹${data.financials.fees_paid?.toLocaleString("en-IN")}
-• *Balance Due:* ₹${data.financials.fees_balance?.toLocaleString("en-IN")}
-• *Status:* ${data.financials.status_label}
+• *Total Fees:* ₹${data.financials?.fees_total?.toLocaleString("en-IN")}
+• *Fees Paid:* ₹${data.financials?.fees_paid?.toLocaleString("en-IN")}
+• *Balance Due:* ₹${data.financials?.fees_balance?.toLocaleString("en-IN")}
+• *Status:* ${data.financials?.status_label}
 
 *MANDATORY INSTRUCTIONS:*
-1. Arrive strictly at your allotted time slot (${formatSlot12(data.allotment.slot_hour)}).
+1. Arrive strictly at your allotted time slot (${formatSlot12(data.allotment?.slot_hour)}).
 2. Always carry your valid Learner's License (LLR) copy.
 3. Wear flat footwear/sneakers during training.
 4. Advance 12h notice required for emergency rescheduling.
 
-For queries, contact your branch: ${data.school.phone}`;
+For queries, contact your branch: ${data.school?.phone}`;
+  };
 
+  const handleShareWhatsApp = (target) => {
+    if (!data) return;
+    const message = generateMessage();
+    let rawPhone = "";
+    if (target === "student") {
+      rawPhone = data.student?.phone;
+    } else if (target === "manager") {
+      rawPhone = data.manager?.phone || "+91 98765 43211";
+    } else if (target === "trainer") {
+      rawPhone = data.allotment?.assigned_trainer?.phone;
+      if (!rawPhone) {
+        toast.error("Allotted trainer phone number not available");
+        return;
+      }
+    }
+
+    const clean = rawPhone?.replace(/[^0-9]/g, "");
+    if (!clean) {
+      toast.error(`Phone number for ${target} not available`);
+      return;
+    }
+    const targetPhone = clean.length === 10 ? `91${clean}` : clean;
     window.open(`https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`, "_blank");
+  };
+
+  const handleCopyText = () => {
+    const message = generateMessage();
+    navigator.clipboard.writeText(message);
+    toast.success("Admission Slip & Schedule copied to clipboard!");
   };
 
   const school = data?.school || {};
@@ -95,6 +119,7 @@ For queries, contact your branch: ${data.school.phone}`;
   const schedule = data?.schedule || [];
   const financials = data?.financials || {};
   const instructions = data?.instructions || [];
+  const manager = data?.manager || {};
 
   return (
     <div className="fixed inset-0 z-50 bg-zinc-900/70 backdrop-blur-xs flex items-start justify-center p-4 pt-8 pb-12 overflow-y-auto">
@@ -108,20 +133,43 @@ For queries, contact your branch: ${data.school.phone}`;
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => handleShareWhatsApp("manager")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+              title={`Send invoice & 12-day schedule to ${manager.name || "Branch Manager"} on WhatsApp`}
+            >
+              <WhatsappLogo size={15} weight="bold" /> WhatsApp Manager
+            </button>
+            <button
+              onClick={() => handleShareWhatsApp("student")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+              title="Share receipt & schedule directly to student's WhatsApp"
+            >
+              <WhatsappLogo size={15} weight="bold" /> Student
+            </button>
+            {allotment?.assigned_trainer?.phone && (
+              <button
+                onClick={() => handleShareWhatsApp("trainer")}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+                title="Send slot & student details to allotted instructor"
+              >
+                <WhatsappLogo size={14} weight="bold" /> Trainer
+              </button>
+            )}
+            <button
+              onClick={handleCopyText}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-300 text-xs font-bold uppercase tracking-wider transition-colors"
+              title="Copy formatted invoice & schedule text to clipboard"
+            >
+              <Copy size={14} weight="bold" /> Copy Text
+            </button>
             <button
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-300 hover:bg-zinc-100 text-zinc-900 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
               title="Print official agreement slip or Save as PDF"
             >
               <Printer size={15} weight="bold" /> Print / PDF
-            </button>
-            <button
-              onClick={handleShareWhatsApp}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
-              title="Share receipt & schedule directly to student's WhatsApp"
-            >
-              <WhatsappLogo size={15} weight="bold" /> Share WhatsApp
             </button>
             <button
               onClick={onClose}
