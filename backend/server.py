@@ -1148,6 +1148,41 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
         f"ALLOTTED TRAINER CONTACT: Your primary driving instructor is {assigned_trainer.get('name') if assigned_trainer else 'Assigned Instructor'} ({assigned_trainer.get('phone') if assigned_trainer else 'Branch Reception'}). Call directly for day-of pickup or vehicle coordination.",
     ]
 
+    # Format course name
+    course_map = {
+        "scooty": "Scooty Training",
+        "gearless": "Scooty Training",
+        "geared": "Motorcycle (Geared) Training",
+        "2w": "Two Wheeler Training",
+        "4w": "Car / 4-Wheeler Training",
+        "lmv": "Car Driving Course",
+        "combo": "Combo (2-Wheeler + 4-Wheeler)",
+    }
+    raw_course = str(s.get("license_type") or "scooty").lower()
+    course_name = course_map.get(raw_course, f"{s.get('license_type', 'Driving').title()} Training")
+
+    # Format clean date helper
+    def _clean_date_fmt(d_str):
+        if not d_str:
+            return "—"
+        try:
+            from datetime import datetime
+            return datetime.strptime(d_str[:10], "%Y-%m-%d").strftime("%d-%b-%Y")
+        except Exception:
+            return d_str
+
+    start_date_clean = _clean_date_fmt(s.get("joining_date") or date.today().isoformat())
+    end_date_clean = _clean_date_fmt(classes[-1].get("scheduled_date")) if classes and classes[-1].get("scheduled_date") else start_date_clean
+    validity_str = f"{start_date_clean} to {end_date_clean}"
+
+    latest_payment = payments[-1] if payments else None
+    payment_mode = (latest_payment.get("method") or "Cash").capitalize() if latest_payment else "Cash"
+
+    # Deterministic receipt number e.g. 300, 301 or stored receipt_no
+    receipt_no = s.get("receipt_no")
+    if not receipt_no:
+        receipt_no = str(abs(hash(student_id)) % 900 + 100)
+
     # Look up manager for this branch
     manager_doc = await db.users.find_one({"role": "manager", "location": branch_location}, {"_id": 0, "password_hash": 0})
     if not manager_doc:
@@ -1155,21 +1190,31 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
 
     return {
         "invoice_number": invoice_number,
+        "receipt_no": receipt_no,
         "date": date.today().isoformat(),
+        "issue_date_formatted": _clean_date_fmt(date.today().isoformat()),
         "created_at": s.get("created_at") or _now_iso(),
+        "course_name": course_name,
+        "validity": validity_str,
+        "working_days": "Monday–Saturday",
+        "daily_duration": "1 hour",
+        "sessions_count": len(classes) if classes else int(s.get("total_classes", 10) or 10),
+        "payment_mode": payment_mode,
+        "received_by": "LEARN & DRIVE2",
         "manager": {
             "name": manager_doc.get("name") if manager_doc else "Branch Manager",
-            "phone": manager_doc.get("phone") if manager_doc else "+91 98765 43211",
-            "email": manager_doc.get("email") if manager_doc else "manager@ridewell.com",
+            "phone": manager_doc.get("phone") if manager_doc else "+91 85018 52055",
+            "email": manager_doc.get("email") if manager_doc else "manager@learnanddrive.com",
             "location": branch_location,
         },
         "school": {
-            "name": "RideWell Motor Driving School",
-            "tagline": "Govt. Authorized Motor Driving Training Institution",
+            "name": "LEARN & DRIVE2",
+            "tagline": "RIDE WITH CONFIDENCE",
+            "motto": "LEARN • RIDE • DRIVE WITH CONFIDENCE",
             "branch": f"{branch_location} Branch",
             "address": branch_address,
-            "phone": "+91 98765 43210",
-            "email": "support@ridewell.com",
+            "phone": "+91 85018 52055",
+            "email": "support@learnanddrive.com",
             "rto_registration": "TS-RTO-DRV-2024-8842",
         },
         "student": {

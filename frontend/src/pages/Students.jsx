@@ -14,10 +14,12 @@ import {
   FileCsv,
   FileXls,
   DownloadSimple,
+  FileText,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import PhotoUploader from "@/components/PhotoUploader";
 import CopyButton from "@/components/CopyButton";
+import InvoiceModal from "@/components/InvoiceModal";
 import { exportStudentsToCsv, downloadMasterArchiveExcel } from "@/lib/exportUtils";
 import { API } from "@/lib/api";
 
@@ -303,7 +305,7 @@ const Field = ({ label, children }) => (
 /* ────────────────────────────────────────────
    Student Table — Reused for both tabs
    ──────────────────────────────────────────── */
-function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
+function StudentTable({ students, loading, onEnroll, onReload, isAdmin, onViewInvoice }) {
   if (loading) {
     return <div className="p-10 text-center label-tag animate-pulse">Loading…</div>;
   }
@@ -331,7 +333,7 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
           <th className="label-tag p-3 text-right">Progress</th>
           {isAdmin && <th className="label-tag p-3 text-right">Fees</th>}
           <th className="label-tag p-3 text-right">Status</th>
-          {isAdmin && <th className="label-tag p-3 text-right">Actions</th>}
+          <th className="label-tag p-3 text-right">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -425,29 +427,42 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
                   {isEndingSoon ? "Ending Soon" : s.status}
                 </span>
               </td>
-              {isAdmin && (
-                <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+              <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                <div className="inline-flex items-center gap-1.5 justify-end">
                   <button
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.preventDefault();
-                      if (window.confirm(`Delete ${s.name} and all their records permanently?`)) {
-                        try {
-                          await api.delete(`/students/${s.id}`);
-                          toast.success("Student deleted");
-                          if (onReload) onReload();
-                        } catch (err) {
-                          toast.error(err.message || "Failed to delete student");
-                        }
-                      }
+                      if (onViewInvoice) onViewInvoice(s.id);
                     }}
-                    className="p-1.5 border border-zinc-300 hover:bg-red-600 hover:text-white hover:border-red-600 inline-flex items-center justify-center transition-colors"
-                    title="Delete Student"
-                    data-testid={`delete-btn-${s.id}`}
+                    className="p-1.5 border border-zinc-300 hover:bg-amber-400 hover:text-black hover:border-amber-500 inline-flex items-center justify-center transition-colors text-zinc-700 bg-white shadow-xs"
+                    title="View & Send Course Receipt (WhatsApp / PDF)"
+                    data-testid={`receipt-btn-${s.id}`}
                   >
-                    <Trash size={13} weight="bold" />
+                    <FileText size={13} weight="bold" />
                   </button>
-                </td>
-              )}
+                  {isAdmin && (
+                    <button
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        if (window.confirm(`Delete ${s.name} and all their records permanently?`)) {
+                          try {
+                            await api.delete(`/students/${s.id}`);
+                            toast.success("Student deleted");
+                            if (onReload) onReload();
+                          } catch (err) {
+                            toast.error(err.message || "Failed to delete student");
+                          }
+                        }
+                      }}
+                      className="p-1.5 border border-zinc-300 hover:bg-red-600 hover:text-white hover:border-red-600 inline-flex items-center justify-center transition-colors"
+                      title="Delete Student"
+                      data-testid={`delete-btn-${s.id}`}
+                    >
+                      <Trash size={13} weight="bold" />
+                    </button>
+                  )}
+                </div>
+              </td>
             </tr>
           );
         })}
@@ -475,6 +490,7 @@ export default function Students() {
   const [loading, setLoading] = useState(true);
   const [loadingOld, setLoadingOld] = useState(false);
   const [tab, setTab] = useState("active");
+  const [invoiceStudentId, setInvoiceStudentId] = useState(null);
 
   const load = async (loc = selectedLocation) => {
     const locParam = loc ? `&location=${loc}` : "";
@@ -687,6 +703,7 @@ export default function Students() {
             }
           }}
           isAdmin={isAdmin}
+          onViewInvoice={(sid) => setInvoiceStudentId(sid)}
         />
       </div>
 
@@ -694,7 +711,19 @@ export default function Students() {
         open={open}
         onClose={() => setOpen(false)}
         trainers={trainers}
-        onCreated={() => load()}
+        onCreated={(createdStudent) => {
+          load();
+          if (createdStudent?.id) {
+            setInvoiceStudentId(createdStudent.id);
+            toast.success("Student enrolled! Digital Course Receipt generated.");
+          }
+        }}
+      />
+
+      <InvoiceModal
+        studentId={invoiceStudentId}
+        open={Boolean(invoiceStudentId)}
+        onClose={() => setInvoiceStudentId(null)}
       />
     </div>
   );
