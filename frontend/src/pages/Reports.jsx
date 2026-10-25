@@ -17,6 +17,8 @@ import {
   ArrowClockwise,
   MapPin,
   Sparkle,
+  FileText,
+  FloppyDisk,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -618,8 +620,116 @@ export default function Reports() {
               )}
             </div>
           )}
+
+          {isAdmin && <GoogleSheetsCard />}
         </div>
       )}
+    </div>
+  );
+}
+
+function GoogleSheetsCard() {
+  const [url, setUrl] = useState("");
+  const [configured, setConfigured] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    api
+      .get("/settings/google-sheet")
+      .then((res) => {
+        setConfigured(res.data.configured);
+        setUrl(res.data.webhook_url || "");
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveUrl = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.post("/settings/google-sheet", { webhook_url: url });
+      toast.success("Google Sheets Webhook URL saved");
+      setConfigured(Boolean(url.trim()));
+    } catch (err) {
+      toast.error(err.message || "Failed to save webhook URL");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const syncAll = async () => {
+    setSyncing(true);
+    try {
+      const res = await api.post("/settings/google-sheet/sync-all");
+      if (res.data.ok) {
+        toast.success(res.data.message || "Active students synced to Google Sheet!");
+      } else {
+        toast.error(res.data.error || "Sync failed. Check Webhook URL.");
+      }
+    } catch (err) {
+      toast.error(err.message || "Failed to sync to Google Sheet");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="bento p-6 bg-white shadow-sm mt-8 border border-zinc-200" data-testid="google-sheets-card">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <FileText size={20} weight="bold" className="text-emerald-700" />
+          <h3 className="font-heading text-xl font-bold tracking-tight">Google Sheets Real-Time Sync</h3>
+        </div>
+        <span
+          className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 font-bold uppercase tracking-wider border ${
+            configured
+              ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+              : "bg-amber-50 text-amber-900 border-amber-300"
+          }`}
+        >
+          {configured ? "🟢 Connected & Syncing" : "🟡 Not Connected"}
+        </span>
+      </div>
+
+      <p className="text-xs text-zinc-600 mb-4">
+        Every new student enrolled is automatically added into your Google Sheet in parallel. Paste your Google Apps Script Web App URL below:
+      </p>
+
+      <form onSubmit={saveUrl} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
+        <input
+          type="url"
+          required
+          placeholder="https://script.google.com/macros/s/.../exec"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          className="flex-1 border border-zinc-300 px-3 py-2 text-xs font-mono-data focus:outline-none focus:border-zinc-900"
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-900 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+        >
+          <FloppyDisk size={14} weight="bold" />
+          {saving ? "Saving…" : "Save URL"}
+        </button>
+      </form>
+
+      <div className="flex items-center justify-between pt-4 border-t border-zinc-100 flex-wrap gap-3">
+        <div className="text-[11px] text-zinc-500 font-mono-data">
+          Target Account: <span className="font-bold text-zinc-700">learnanddrive2@gmail.com</span>
+        </div>
+        <button
+          type="button"
+          onClick={syncAll}
+          disabled={syncing || !configured}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Push all 45 current active students into Google Sheet"
+        >
+          <ArrowClockwise size={13} weight="bold" className={syncing ? "animate-spin" : ""} />
+          {syncing ? "Syncing Students…" : "Sync All Active Students to Sheet Now"}
+        </button>
+      </div>
     </div>
   );
 }

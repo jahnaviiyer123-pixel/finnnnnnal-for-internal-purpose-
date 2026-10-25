@@ -38,6 +38,7 @@ try:
     )
     from backend.google_sheets_service import (
         sync_student_to_google_sheet,
+        sync_all_active_students_to_sheet,
         is_sheets_sync_enabled
     )
 except ImportError:
@@ -58,6 +59,7 @@ except ImportError:
     )
     from google_sheets_service import (
         sync_student_to_google_sheet,
+        sync_all_active_students_to_sheet,
         is_sheets_sync_enabled
     )
 
@@ -901,10 +903,11 @@ async def list_students(
     include_classes: Optional[bool] = Query(True),
     user: dict = Depends(get_current_user),
 ):
+    coll = db.students
     q = {}
     if status:
         if status == "old":
-            q["status"] = {"$in": ["completed", "dropped"]}
+            coll = db.archived_students
         else:
             q["status"] = status
     if trainer_id:
@@ -925,7 +928,7 @@ async def list_students(
     elif user.get("role") == "manager" and user.get("location"):
         q["location"] = user["location"]
 
-    cursor = db.students.find(q, {"_id": 0}).sort("joining_date", -1)
+    cursor = coll.find(q, {"_id": 0}).sort("joining_date", -1)
     if limit:
         cursor = cursor.limit(limit)
 
@@ -939,11 +942,12 @@ async def list_students(
     student_ids = [s["id"] for s in students if "id" in s]
     counts = {}
     if include_classes:
+        class_coll = db.archived_classes if status == "old" else db.classes
         pipeline = [
             {"$match": {"student_id": {"$in": student_ids}, "status": "completed"}},
             {"$group": {"_id": "$student_id", "completed_count": {"$sum": 1}}},
         ]
-        counts = {doc["_id"]: doc["completed_count"] async for doc in db.classes.aggregate(pipeline)}
+        counts = {doc["_id"]: doc["completed_count"] async for doc in class_coll.aggregate(pipeline)}
 
     for s in students:
         completed = counts.get(s.get("id"), 0)
@@ -1051,6 +1055,8 @@ async def create_student(body: StudentCreate, user: dict = Depends(get_current_u
 async def get_student(student_id: str, user: dict = Depends(get_current_user)):
     s = await db.students.find_one({"id": student_id}, {"_id": 0})
     if not s:
+        s = await db.archived_students.find_one({"id": student_id}, {"_id": 0})
+    if not s:
         raise HTTPException(status_code=404, detail="Student not found")
     if user.get("role") == "trainer":
         trainer_loc = user.get("location")
@@ -1067,6 +1073,8 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
     fees/payments breakdown, and mandatory training rules.
     """
     s = await db.students.find_one({"id": student_id}, {"_id": 0})
+    if not s:
+        s = await db.archived_students.find_one({"id": student_id}, {"_id": 0})
     if not s:
         raise HTTPException(status_code=404, detail="Student not found")
 
@@ -1090,6 +1098,8 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
 
     # Fetch 12 working days class slots
     classes = await db.classes.find({"student_id": student_id}, {"_id": 0}).sort("class_number", 1).to_list(100)
+    if not classes:
+        classes = await db.archived_classes.find({"student_id": student_id}, {"_id": 0}).sort("class_number", 1).to_list(100)
 
     # Fetch payments ledger
     payments = await db.payments.find({"student_id": student_id}, {"_id": 0}).sort("date", 1).to_list(100)
@@ -1191,7 +1201,11 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
 
 @api.patch("/students/{student_id}")
 async def update_student(student_id: str, body: StudentUpdate, user: dict = Depends(get_current_user)):
-    existing = await db.students.find_one({"id": student_id}, {"_id": 0})
+    target_coll = db.students
+    existing = await target_coll.find_one({"id": student_id}, {"_id": 0})
+    if not existing:
+        target_coll = db.archived_students
+        existing = await target_coll.find_one({"id": student_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Student not found")
     if user.get("role") == "trainer":
@@ -1201,15 +1215,17 @@ async def update_student(student_id: str, body: StudentUpdate, user: dict = Depe
     updates = {k: v for k, v in body.model_dump(exclude_none=True).items()}
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
-    await db.students.update_one({"id": student_id}, {"$set": updates})
+    await target_coll.update_one({"id": student_id}, {"$set": updates})
     invalidate_stats()
-    return await db.students.find_one({"id": student_id}, {"_id": 0})
+    return await target_coll.find_one({"id": student_id}, {"_id": 0})
 
 
 @api.delete("/students/{student_id}")
 async def delete_student(student_id: str, user: dict = Depends(require_admin)):
     await db.students.delete_one({"id": student_id})
+    await db.archived_students.delete_one({"id": student_id})
     await db.classes.delete_many({"student_id": student_id})
+    await db.archived_classes.delete_many({"student_id": student_id})
     await db.payments.delete_many({"student_id": student_id})
     invalidate_stats()
     return {"ok": True}
@@ -1244,7 +1260,17 @@ async def list_active_classes(location: Optional[str] = None, user: dict = Depen
 @api.get("/students/{student_id}/classes")
 async def list_classes(student_id: str, user: dict = Depends(get_current_user)):
     classes = await db.classes.find({"student_id": student_id}, {"_id": 0}).sort("class_number", 1).to_list(100)
+    if not classes:
+        classes = await db.archived_classes.find({"student_id": student_id}, {"_id": 0}).sort("class_number", 1).to_list(100)
     return classes
+
+
+@api.delete("/classes/{class_id}")
+async def delete_class(class_id: str, user: dict = Depends(require_admin)):
+    await db.classes.delete_one({"id": class_id})
+    await db.archived_classes.delete_one({"id": class_id})
+    invalidate_stats()
+    return {"ok": True}
 
 
 @api.patch("/classes/{class_id}")
@@ -2300,6 +2326,12 @@ async def save_google_sheet_setting(body: dict, user: dict = Depends(get_current
     )
     os.environ["GOOGLE_SHEET_WEBHOOK_URL"] = url
     return {"ok": True, "webhook_url": url}
+
+
+@api.post("/settings/google-sheet/sync-all")
+async def trigger_google_sheet_sync_all(user: dict = Depends(require_admin)):
+    result = await asyncio.to_thread(sync_all_active_students_to_sheet)
+    return result
 
 
 # Include router + middleware

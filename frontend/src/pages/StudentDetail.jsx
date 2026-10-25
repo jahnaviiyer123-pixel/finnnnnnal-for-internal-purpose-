@@ -68,7 +68,7 @@ export default function StudentDetail() {
 
   const saveEdit = async () => {
     try {
-      const fields = ["name", "phone", "email", "age", "gender", "license_type", "joining_date", "slot_time", "needs_pickup", "pickup_address", "drop_address", "assigned_trainer_id", "pickup_trainer_id", "drop_trainer_id", "photo_url", "fees_total", "fees_paid", "notes", "status"];
+      const fields = ["name", "phone", "email", "age", "gender", "license_type", "joining_date", "slot_time", "location", "total_classes", "needs_pickup", "pickup_address", "drop_address", "assigned_trainer_id", "pickup_trainer_id", "drop_trainer_id", "photo_url", "fees_total", "fees_paid", "notes", "status"];
       const payload = {};
       fields.forEach((k) => {
         if (editForm[k] !== undefined && editForm[k] !== student[k]) {
@@ -281,6 +281,57 @@ export default function StudentDetail() {
                 <div className="text-sm font-semibold capitalize">{student.status}</div>
               )}
             </div>
+            <div>
+              <div className="label-tag mb-1.5">Branch Location</div>
+              {editing && isAdmin ? (
+                <select
+                  value={editForm.location || "Khajaguda"}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                  className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-semibold"
+                >
+                  <option value="Khajaguda">Khajaguda</option>
+                  <option value="Attapur">Attapur</option>
+                  <option value="Madhapur">Madhapur</option>
+                </select>
+              ) : (
+                <div className="text-sm font-semibold uppercase">{student.location || "Khajaguda"}</div>
+              )}
+            </div>
+            {isAdmin && editing && (
+              <>
+                <div>
+                  <div className="label-tag mb-1.5">Total Fees (₹)</div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editForm.fees_total ?? student.fees_total ?? 0}
+                    onChange={(e) => setEditForm({ ...editForm, fees_total: Number(e.target.value) || 0 })}
+                    className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-mono-data font-bold"
+                  />
+                </div>
+                <div>
+                  <div className="label-tag mb-1.5">Fees Paid (₹)</div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editForm.fees_paid ?? student.fees_paid ?? 0}
+                    onChange={(e) => setEditForm({ ...editForm, fees_paid: Number(e.target.value) || 0 })}
+                    className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-mono-data font-bold text-emerald-700"
+                  />
+                </div>
+                <div>
+                  <div className="label-tag mb-1.5">Course Classes (Total)</div>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={editForm.total_classes ?? student.total_classes ?? 12}
+                    onChange={(e) => setEditForm({ ...editForm, total_classes: Number(e.target.value) || 12 })}
+                    className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-mono-data"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {(student.needs_pickup || editing) && (
@@ -605,9 +656,28 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
               <XCircle size={10} weight="bold" /> Missed
             </button>
             {isAdmin && (
-              <button onClick={() => setEditing(true)} data-testid={`edit-class-${cls.class_number}`} className="p-1.5 hover:bg-zinc-100 text-zinc-500 border border-zinc-200">
-                <PencilSimple size={11} weight="bold" />
-              </button>
+              <>
+                <button onClick={() => setEditing(true)} data-testid={`edit-class-${cls.class_number}`} className="p-1.5 hover:bg-zinc-100 text-zinc-500 border border-zinc-200" title="Edit class">
+                  <PencilSimple size={11} weight="bold" />
+                </button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm(`Delete Class ${cls.class_number}?`)) {
+                      try {
+                        await api.delete(`/classes/${cls.id}`);
+                        toast.success(`Class ${cls.class_number} removed`);
+                        onSaved();
+                      } catch (err) {
+                        toast.error(err.message || "Failed to delete class");
+                      }
+                    }
+                  }}
+                  className="p-1.5 hover:bg-red-50 text-red-600 border border-zinc-200"
+                  title="Delete class"
+                >
+                  <Trash size={11} weight="bold" />
+                </button>
+              </>
             )}
           </div>
         ) : (
@@ -618,11 +688,47 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
                 <button onClick={save} data-testid={`save-class-${cls.class_number}`} className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-zinc-900 text-white hover:bg-blue-700">
                   Save
                 </button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm(`Delete Class ${cls.class_number}?`)) {
+                      try {
+                        await api.delete(`/classes/${cls.id}`);
+                        toast.success(`Class ${cls.class_number} removed`);
+                        onSaved();
+                      } catch (err) {
+                        toast.error(err.message || "Failed to delete class");
+                      }
+                    }
+                  }}
+                  className="p-1.5 hover:bg-red-50 text-red-600 border border-zinc-200"
+                  title="Delete class"
+                >
+                  <Trash size={11} weight="bold" />
+                </button>
               </div>
             ) : (
-              <button onClick={() => setEditing(true)} data-testid={`edit-class-${cls.class_number}`} className="p-1.5 hover:bg-zinc-100">
-                <PencilSimple size={14} weight="bold" />
-              </button>
+              <div className="flex items-center justify-end gap-1">
+                <button onClick={() => setEditing(true)} data-testid={`edit-class-${cls.class_number}`} className="p-1.5 hover:bg-zinc-100">
+                  <PencilSimple size={14} weight="bold" />
+                </button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm(`Delete Class ${cls.class_number}?`)) {
+                      try {
+                        await api.delete(`/classes/${cls.id}`);
+                        toast.success(`Class ${cls.class_number} removed`);
+                        onSaved();
+                      } catch (err) {
+                        toast.error(err.message || "Failed to delete class");
+                      }
+                    }
+                  }}
+                  className="p-1.5 hover:bg-red-50 text-red-600 border border-zinc-200"
+                  title="Delete class"
+                >
+                  <Trash size={12} weight="bold" />
+                </button>
+              </div>
             )
           ) : (
             <span className="text-[10px] text-zinc-400 italic">No actions</span>
