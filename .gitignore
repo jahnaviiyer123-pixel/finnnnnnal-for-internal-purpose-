@@ -111,3 +111,7 @@ backups/
 learn-and-drive-website/
 .agents/
 
+.env*
+mongo_shell.sh
+backup_now.sh
+skills-lock.json
