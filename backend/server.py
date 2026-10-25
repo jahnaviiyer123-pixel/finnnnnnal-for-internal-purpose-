@@ -19,6 +19,40 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
+# ---------- Hostinger Email & Marketing Services ----------
+try:
+    from backend.email_service import (
+        send_smtp_email,
+        send_enrollment_email,
+        send_payment_receipt_email,
+        get_email_config_status,
+        is_smtp_configured
+    )
+    from backend.hostinger_reach_service import (
+        sync_contacts_to_reach,
+        get_reach_summary
+    )
+    from backend.n8n_service import (
+        dispatch_n8n_event,
+        is_n8n_configured
+    )
+except ImportError:
+    from email_service import (
+        send_smtp_email,
+        send_enrollment_email,
+        send_payment_receipt_email,
+        get_email_config_status,
+        is_smtp_configured
+    )
+    from hostinger_reach_service import (
+        sync_contacts_to_reach,
+        get_reach_summary
+    )
+    from n8n_service import (
+        dispatch_n8n_event,
+        is_n8n_configured
+    )
+
 
 # ---------- DB ----------
 mongo_url = os.environ.get("MONGO_URL")
@@ -971,6 +1005,24 @@ async def create_student(body: StudentCreate, user: dict = Depends(get_current_u
         logger.info("Automatically recorded initial payment of %d for student %s", doc["fees_paid"], sid)
 
     await _create_class_slots(sid, total_classes, assigned_trainer, body.joining_date, loc)
+    
+    # Trigger Hostinger email notification, Reach marketing sync, and n8n webhook in background
+    try:
+        # 1. Dispatch to Hostinger n8n instance (Invoice / Welcome Kit / WhatsApp)
+        asyncio.create_task(asyncio.to_thread(dispatch_n8n_event, "student.enrolled", dict(doc)))
+
+        if doc.get("email"):
+            # 2. Send transactional enrollment confirmation via Hostinger SMTP
+            asyncio.create_task(asyncio.to_thread(send_enrollment_email, dict(doc)))
+            # 3. Sync student contact to Hostinger Reach (Email Marketing)
+            asyncio.create_task(asyncio.to_thread(
+                sync_contacts_to_reach,
+                [{"name": doc.get("name"), "email": doc.get("email"), "phone": doc.get("phone")}],
+                "Student"
+            ))
+    except Exception as mail_err:
+        logger.warning("Non-blocking background email/marketing/n8n error for student %s: %s", sid, mail_err)
+
     doc.pop("_id", None)
     if user.get("role") != "admin":
         doc.pop("fees_total", None)
@@ -1038,8 +1090,8 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
     branch_location = s.get("location") or "Khajaguda"
     branch_addresses = {
         "Khajaguda": "Plot 42, Gachibowli-Khajaguda Main Road, Near Bio-Diversity Park, Hyderabad - 500075",
-        "Manikonda": "Road No 3, Shirdi Sai Nagar, Puppalguda-Manikonda, Hyderabad - 500089",
-        "Kondapur": "Opposite Botanical Garden Road, Kothaguda Junction, Kondapur, Hyderabad - 500084",
+        "Madhapur": "Near Metro Station, Hitech City Main Road, Madhapur, Hyderabad - 500081",
+        "Attapur": "Main Road, Pillar No 143, Attapur, Hyderabad - 500048",
     }
     branch_address = branch_addresses.get(branch_location, "Main Road, Hyderabad, Telangana")
 
@@ -1292,6 +1344,36 @@ async def create_payment(body: PaymentCreate, user: dict = Depends(require_admin
         {"id": body.student_id},
         {"$inc": {"fees_paid": body.amount}},
     )
+    
+    # Trigger Hostinger payment receipt email & n8n invoice generation in background
+    try:
+        async def _notify_payment():
+            student = await db.students.find_one({"id": body.student_id}, {"_id": 0})
+            if student:
+                # 1. Dispatch event to Hostinger n8n for PDF Invoice & WhatsApp
+                n8n_invoice_data = {
+                    "payment_id": doc["id"],
+                    "invoice_number": f"INV-{doc['id'][:8].upper()}",
+                    "amount": doc["amount"],
+                    "date": doc["date"],
+                    "method": doc["method"],
+                    "student_id": student.get("id"),
+                    "student_name": student.get("name"),
+                    "student_phone": student.get("phone"),
+                    "student_email": student.get("email"),
+                    "fees_total": student.get("fees_total", 0),
+                    "fees_paid": student.get("fees_paid", 0) + doc["amount"],
+                    "balance_due": max(0, student.get("fees_total", 0) - (student.get("fees_paid", 0) + doc["amount"]))
+                }
+                dispatch_n8n_event("payment.recorded", n8n_invoice_data)
+
+                # 2. Send Hostinger SMTP receipt email
+                if student.get("email"):
+                    send_payment_receipt_email(dict(doc), dict(student))
+        asyncio.create_task(_notify_payment())
+    except Exception as pay_mail_err:
+        logger.warning("Non-blocking receipt email/n8n dispatch failed: %s", pay_mail_err)
+
     doc.pop("_id", None)
     invalidate_stats()
     return doc
@@ -1667,7 +1749,7 @@ async def delete_holiday(
 @api.get("/locations")
 async def list_locations(user: dict = Depends(get_current_user)):
     """List all available locations."""
-    defaults = ["Khajaguda", "Manikonda", "Kondapur"]
+    defaults = ["Attapur", "Khajaguda", "Madhapur"]
     user_locs = await db.users.distinct("location")
     student_locs = await db.students.distinct("location")
     all_locs = sorted(list({loc for loc in (defaults + user_locs + student_locs) if loc and isinstance(loc, str)}))
@@ -2053,6 +2135,123 @@ async def daily_report(
         payments = await db.payments.find(pq, {"_id": 0}).to_list(500)
 
     return {"date": day, "location": target_loc, "classes": classes, "attendance": attendance, "payments": payments}
+
+
+# ---------- Hostinger Email & Marketing API Endpoints ----------
+
+class SendTestEmailRequest(BaseModel):
+    to_email: EmailStr
+    subject: Optional[str] = "Test Email from Hostinger - RideWell"
+    message: Optional[str] = "This is a test email verifying that your Hostinger SMTP email integration is active and working."
+
+@api.get("/email/config")
+async def get_email_status(user: dict = Depends(get_current_user)):
+    """Return Hostinger SMTP and Reach integration status (Admin/Manager)."""
+    smtp_status = get_email_config_status()
+    reach_status = get_reach_summary()
+    return {
+        "smtp": smtp_status,
+        "reach": reach_status
+    }
+
+@api.post("/email/test")
+async def send_test_email_endpoint(body: SendTestEmailRequest, user: dict = Depends(require_admin)):
+    """Send a diagnostic test email via Hostinger SMTP (Admin only)."""
+    html_content = f"""
+    <div style="font-family: sans-serif; padding: 24px; border: 1px solid #e4e4e7; border-radius: 8px; max-width: 500px;">
+      <h2 style="color: #16a34a; margin-top: 0;">Hostinger SMTP Connected!</h2>
+      <p>Congratulations, your Hostinger email server is successfully configured and sending transactional emails for <strong>Adarsh Motor Driving School</strong>.</p>
+      <div style="background: #f4f4f5; padding: 12px; border-radius: 6px; font-size: 13px; margin: 16px 0;">
+        <strong>Details:</strong><br>
+        • Host: smtp.hostinger.com<br>
+        • Recipient: {body.to_email}<br>
+        • Dispatched by: {user.get('name', 'Admin')} ({user.get('email', '')})
+      </div>
+      <p style="font-size: 12px; color: #71717a;">Message: {body.message}</p>
+    </div>
+    """
+    res = await asyncio.to_thread(
+        send_smtp_email,
+        body.to_email,
+        body.subject,
+        html_content,
+        body.message
+    )
+    if not res.get("success") and not res.get("simulated"):
+        raise HTTPException(status_code=500, detail=res.get("error", "Failed to deliver email via Hostinger SMTP"))
+    return res
+
+@api.get("/marketing/reach/status")
+async def get_marketing_status(user: dict = Depends(get_current_user)):
+    """Return Hostinger Reach Email Marketing status, quotas and tags."""
+    return get_reach_summary()
+
+@api.post("/marketing/reach/sync-all")
+async def sync_all_contacts_to_reach(user: dict = Depends(require_admin)):
+    """
+    Sync all students and users with valid email addresses to Hostinger Reach
+    Email Marketing audience with appropriate tags (Admin only).
+    """
+    # 1. Fetch all students with email
+    students_cursor = db.students.find(
+        {"email": {"$regex": r"@"}},
+        {"_id": 0, "name": 1, "email": 1, "phone": 1, "status": 1}
+    )
+    students = await students_cursor.to_list(1000)
+
+    # 2. Fetch all system users/staff with email
+    users_cursor = db.users.find(
+        {"email": {"$regex": r"@"}},
+        {"_id": 0, "name": 1, "email": 1, "phone": 1}
+    )
+    users_list = await users_cursor.to_list(1000)
+
+    # Dispatch sync in background thread
+    student_contacts = [{"name": s.get("name"), "email": s.get("email"), "phone": s.get("phone")} for s in students if s.get("email")]
+    staff_contacts = [{"name": u.get("name"), "email": u.get("email"), "phone": u.get("phone")} for u in users_list if u.get("email")]
+
+    student_res = await asyncio.to_thread(sync_contacts_to_reach, student_contacts, "Student")
+    staff_res = await asyncio.to_thread(sync_contacts_to_reach, staff_contacts, "Prospect")
+
+    return {
+        "success": True,
+        "students_synced": len(student_contacts),
+        "staff_synced": len(staff_contacts),
+        "student_result": student_res,
+        "staff_result": staff_res
+    }
+
+
+# ---------- Hostinger n8n Webhook Endpoint ----------
+
+@api.get("/n8n/config")
+async def get_n8n_status(user: dict = Depends(get_current_user)):
+    """Check if Hostinger n8n webhook URL is configured."""
+    return {
+        "configured": is_n8n_configured(),
+        "subscription": "Hostinger AI automation apps",
+        "webhook_url": os.environ.get("N8N_WEBHOOK_URL", "") if user.get("role") == "admin" else "[Restricted]"
+    }
+
+@api.post("/n8n/test")
+async def send_n8n_test(user: dict = Depends(require_admin)):
+    """Send a mock payment & invoice event to the Hostinger n8n instance (Admin only)."""
+    test_data = {
+        "payment_id": str(uuid.uuid4()),
+        "invoice_number": "INV-TEST-001",
+        "amount": 5000,
+        "date": date.today().isoformat(),
+        "method": "online",
+        "student_id": "test-student-id",
+        "student_name": "Test Student",
+        "student_phone": "+919999999999",
+        "student_email": "student@example.com",
+        "fees_total": 8000,
+        "fees_paid": 5000,
+        "balance_due": 3000
+    }
+    res = await asyncio.to_thread(dispatch_n8n_event, "test.invoice.generate", test_data)
+    return res
 
 
 # Include router + middleware

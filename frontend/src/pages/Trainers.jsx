@@ -31,7 +31,7 @@ export default function Trainers() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [locations, setLocations] = useState(["Khajaguda", "Manikonda", "Kondapur"]);
+  const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
   const [selectedLocation, setSelectedLocation] = useState(user?.role === "admin" ? "" : (user?.location || "Khajaguda"));
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", photo_url: null, location: user?.location || "Khajaguda" });
 
@@ -330,9 +330,9 @@ export default function Trainers() {
                   className="w-full border border-zinc-300 px-3 py-2 text-sm bg-white"
                   data-testid="trainer-location-select"
                 >
+                  <option value="Attapur">Attapur</option>
                   <option value="Khajaguda">Khajaguda</option>
-                  <option value="Manikonda">Manikonda</option>
-                  <option value="Kondapur">Kondapur</option>
+                  <option value="Madhapur">Madhapur</option>
                 </select>
               </div>
               <div>

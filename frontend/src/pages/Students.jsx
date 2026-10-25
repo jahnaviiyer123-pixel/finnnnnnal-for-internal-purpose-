@@ -172,9 +172,9 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
               </div>
             ) : (
               <select value={form.location} onChange={(e) => onLocationChange(e.target.value)} className={inputCls} data-testid="student-location-select">
+                <option value="Attapur">Attapur</option>
                 <option value="Khajaguda">Khajaguda</option>
-                <option value="Manikonda">Manikonda</option>
-                <option value="Kondapur">Kondapur</option>
+                <option value="Madhapur">Madhapur</option>
               </select>
             )}
           </Field>
@@ -451,7 +451,7 @@ export default function Students() {
   const [oldStudents, setOldStudents] = useState([]);
   const [oldLoaded, setOldLoaded] = useState(false);
   const [trainers, setTrainers] = useState([]);
-  const [locations, setLocations] = useState(["Khajaguda", "Manikonda", "Kondapur"]);
+  const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
   const [selectedLocation, setSelectedLocation] = useState(isAdmin ? "" : (user?.location || "Khajaguda"));
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);

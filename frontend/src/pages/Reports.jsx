@@ -26,7 +26,7 @@ export default function Reports() {
   const isManagerOrAdmin = isAdmin || isManager;
 
   const [period, setPeriod] = useState("weekly"); // "weekly" | "monthly" | "daily"
-  const [locations, setLocations] = useState(["Khajaguda", "Manikonda", "Kondapur"]);
+  const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
   const [selectedLocation, setSelectedLocation] = useState(isAdmin ? "" : (user?.location || "Khajaguda"));
 
   // Weekly date state (Monday to Sunday)

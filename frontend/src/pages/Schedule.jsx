@@ -31,7 +31,7 @@ export default function Schedule() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // all | mine
-  const [locations, setLocations] = useState(["Khajaguda", "Manikonda", "Kondapur"]);
+  const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
   const [selectedLocation, setSelectedLocation] = useState(isAdmin ? "" : (user?.location || "Khajaguda"));
 
   // Monthly Calendar & Holidays state
