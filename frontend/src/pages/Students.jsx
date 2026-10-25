@@ -10,9 +10,11 @@ import {
   Users,
   Archive,
   Trash,
+  Copy,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import PhotoUploader from "@/components/PhotoUploader";
+import CopyButton from "@/components/CopyButton";
 import { API } from "@/lib/api";
 
 function StudentAvatar({ url, name }) {
@@ -369,7 +371,12 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin }) {
                   </div>
                 </div>
               </td>
-              <td className="p-3 font-mono-data text-xs text-zinc-600">{s.phone}</td>
+              <td className="p-3 font-mono-data text-xs text-zinc-600" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-1.5">
+                  <span>{s.phone}</span>
+                  <CopyButton text={s.phone} title={`Copy ${s.phone}`} successMessage={`Copied phone: ${s.phone}`} />
+                </div>
+              </td>
               <td className="p-3 hidden md:table-cell font-mono-data text-xs text-zinc-600">
                 {s.joining_date}
               </td>
@@ -609,7 +616,29 @@ export default function Students() {
           data-testid="students-search"
           className="flex-1 bg-transparent outline-none text-sm"
         />
-        <div className="label-tag">{filtered.length} records</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {filtered.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const numbers = Array.from(new Set(filtered.map((s) => s.phone).filter(Boolean)));
+                if (numbers.length === 0) {
+                  toast.error("No phone numbers to copy");
+                  return;
+                }
+                navigator.clipboard.writeText(numbers.join(", "));
+                toast.success(`Copied ${numbers.length} student phone numbers to clipboard!`);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-300 transition-colors"
+              title="Copy all visible student phone numbers (comma-separated)"
+              data-testid="copy-all-phones-btn"
+            >
+              <Copy size={13} weight="bold" />
+              <span>Copy All Numbers ({filtered.filter((s) => s.phone).length})</span>
+            </button>
+          )}
+          <div className="label-tag whitespace-nowrap">{filtered.length} records</div>
+        </div>
       </div>
 
       {/* Table */}

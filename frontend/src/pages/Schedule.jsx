@@ -20,6 +20,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import CopyButton from "@/components/CopyButton";
 
 export default function Schedule() {
   const { user } = useAuth();
@@ -869,8 +870,9 @@ function ScheduleCard({ row, trainerName, onMark }) {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1 text-xs text-zinc-600 font-mono-data mt-0.5">
-            <Phone size={11} weight="bold" /> {row.phone}
+          <div className="flex items-center gap-1.5 text-xs text-zinc-600 font-mono-data mt-0.5">
+            <span className="flex items-center gap-1"><Phone size={11} weight="bold" /> {row.phone}</span>
+            <CopyButton text={row.phone} size={11} title={`Copy ${row.phone}`} successMessage={`Copied phone: ${row.phone}`} />
           </div>
         </Link>
         {row.needs_pickup && (

@@ -16,6 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import PhotoUploader from "@/components/PhotoUploader";
 import InvoiceModal from "@/components/InvoiceModal";
+import CopyButton from "@/components/CopyButton";
 import { toast } from "sonner";
 
 export default function StudentDetail() {
@@ -143,6 +144,12 @@ export default function StudentDetail() {
                 <span className="font-mono-data text-xs text-zinc-500">
                   Joined {student.joining_date}
                 </span>
+                {student.phone && (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-mono-data bg-zinc-100 px-2.5 py-1 border border-zinc-200">
+                    <span>📞 {student.phone}</span>
+                    <CopyButton text={student.phone} size={12} title="Copy phone number" />
+                  </span>
+                )}
               </div>
               </div>
             </div>
@@ -183,7 +190,7 @@ export default function StudentDetail() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 border-t border-zinc-200 pt-6">
-            <DetailField label="Phone" editing={editing} value={student.phone}
+            <DetailField label="Phone" editing={editing} value={student.phone} copyable={true}
               onChange={(v) => setEditForm({ ...editForm, phone: v })} editValue={editForm.phone} />
             <DetailField label="Email" editing={editing} value={student.email || "—"}
               onChange={(v) => setEditForm({ ...editForm, email: v })} editValue={editForm.email || ""} />
@@ -452,7 +459,7 @@ function StudentPhoto({ url, name }) {
   );
 }
 
-function DetailField({ label, value, editing, editValue, onChange }) {
+function DetailField({ label, value, editing, editValue, onChange, copyable = false }) {
   return (
     <div>
       <div className="label-tag mb-1.5">{label}</div>
@@ -463,7 +470,12 @@ function DetailField({ label, value, editing, editValue, onChange }) {
           className="w-full border border-zinc-300 px-2 py-1.5 text-sm"
         />
       ) : (
-        <div className="text-sm font-semibold font-mono-data">{value}</div>
+        <div className="flex items-center gap-1.5 text-sm font-semibold font-mono-data">
+          <span>{value}</span>
+          {copyable && value && value !== "—" && (
+            <CopyButton text={value} title={`Copy ${label}`} successMessage={`Copied ${label}: ${value}`} />
+          )}
+        </div>
       )}
     </div>
   );

@@ -15,6 +15,7 @@ import {
   CaretRight,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import CopyButton from "@/components/CopyButton";
 
 export default function Attendance() {
   const { user } = useAuth();
@@ -296,7 +297,10 @@ function StudentAttendance({ user, isAdmin }) {
                       </Link>
                     </td>
                     <td className="p-3 hidden md:table-cell font-mono-data text-xs text-zinc-600">
-                      {s.phone}
+                      <div className="flex items-center gap-1.5">
+                        <span>{s.phone}</span>
+                        <CopyButton text={s.phone} title={`Copy ${s.phone}`} successMessage={`Copied phone: ${s.phone}`} />
+                      </div>
                     </td>
                     <td className="p-3 hidden md:table-cell">
                       {s.slot_time ? (

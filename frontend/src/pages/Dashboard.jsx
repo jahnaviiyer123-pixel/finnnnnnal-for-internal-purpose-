@@ -21,6 +21,7 @@ import {
   MagnifyingGlass,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import CopyButton from "@/components/CopyButton";
 
 function Stat({ label, value, sublabel, Icon, testid }) {
   return (
@@ -280,7 +281,10 @@ export default function Dashboard() {
                             {session.name}
                           </Link>
                           <div className="flex items-center gap-3 text-xs text-zinc-500 font-mono-data mt-1">
-                            <span className="flex items-center gap-1"><Phone size={11} /> {session.phone}</span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="flex items-center gap-1"><Phone size={11} /> {session.phone}</span>
+                              <CopyButton text={session.phone} size={11} title={`Copy ${session.phone}`} />
+                            </span>
                             {targetCls && (
                               <span>· Class {targetCls.class_number}/{session.total_classes || 12} · Status: <span className="font-bold capitalize">{targetCls.status}</span></span>
                             )}
@@ -569,7 +573,10 @@ export default function Dashboard() {
                       </Link>
                     </td>
                     <td className="p-3 hidden md:table-cell font-mono-data text-xs text-zinc-600">
-                      {s.phone}
+                      <div className="flex items-center gap-1.5">
+                        <span>{s.phone}</span>
+                        <CopyButton text={s.phone} size={11} title={`Copy ${s.phone}`} />
+                      </div>
                     </td>
                     <td className="p-3">
                       <span className="inline-block text-[10px] px-2 py-0.5 border border-zinc-300 uppercase tracking-wider font-bold">
