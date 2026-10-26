@@ -2079,9 +2079,10 @@ async def reports_summary(
 ):
     """
     Weekly, monthly, daily, and custom reports for Managers and Admins.
-    Filterable by branch location. Financial metrics strictly visible only to Admins.
+    Filterable by branch location. Admins and Managers see the same report, including financials.
     """
-    is_admin = user.get("role") == "admin"
+    # Reports are identical for admins and managers, including financials
+    show_financials = user.get("role") in ("admin", "manager")
     today_dt = date.today()
 
     # Determine date range
@@ -2183,9 +2184,9 @@ async def reports_summary(
         aq["trainer_id"] = {"$in": list(trainer_ids)}
     attendance_records_task = db.attendance.find(aq, {"_id": 0}).to_list(2000)
 
-    # 5. Financial Metrics (Admin Only)
+    # 5. Financial Metrics
     pq_task = None
-    if is_admin:
+    if show_financials:
         pq = {"date": {"$gte": s_date, "$lte": e_date}}
         if target_location:
             pq["student_id"] = {"$in": list(student_ids)}
@@ -2198,7 +2199,7 @@ async def reports_summary(
     total_fees_collected = 0
     payment_methods_summary = {}
     recent_payments = []
-    if is_admin and pq_task:
+    if show_financials and pq_task:
         payments = await pq_task
         total_fees_collected = sum(p.get("amount", 0) for p in payments)
         for p in payments:
@@ -2277,9 +2278,9 @@ async def reports_summary(
             "completed_students": completed_count,
             "dropped_students": dropped_count,
             "active_trainers": len(trainers),
-            "total_fees_collected": total_fees_collected if is_admin else None,
+            "total_fees_collected": total_fees_collected if show_financials else None,
         },
-        "payment_methods": payment_methods_summary if is_admin else {},
+        "payment_methods": payment_methods_summary if show_financials else {},
         "trainer_performance": trainer_stats,
         "daily_progression": list(daily_breakdown.values()),
         "new_students": [
@@ -2308,7 +2309,7 @@ async def reports_summary(
             }
             for c in completed_classes[:100]
         ],
-        "payments": recent_payments if is_admin else [],
+        "payments": recent_payments if show_financials else [],
     }
 
 

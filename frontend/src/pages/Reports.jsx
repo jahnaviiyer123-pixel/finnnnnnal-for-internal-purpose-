@@ -364,7 +364,7 @@ export default function Reports() {
       ) : (
         <div className="space-y-6">
           {/* Summary Metric Bento Cards */}
-          <div className={`grid grid-cols-2 ${isAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"} gap-4`}>
+          <div className={`grid grid-cols-2 ${isManagerOrAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"} gap-4`}>
             <MetricCard
               label="Classes Conducted"
               value={summary.classes_conducted || 0}
@@ -389,7 +389,7 @@ export default function Reports() {
               sub={selectedLocation ? `${selectedLocation} branch` : "All branches"}
               color="text-purple-700"
             />
-            {isAdmin && (
+            {isManagerOrAdmin && (
               <MetricCard
                 label="Fees Collected"
                 value={`₹${(summary.total_fees_collected || 0).toLocaleString("en-IN")}`}
@@ -629,14 +629,14 @@ export default function Reports() {
             </div>
           </div>
 
-          {/* Admin Only: Payments & Revenue Breakdown */}
-          {isAdmin && (
+          {/* Payments & Revenue Breakdown */}
+          {isManagerOrAdmin && (
             <div className="bento p-6 bg-white shadow-sm">
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-200 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <CurrencyInr size={20} weight="bold" className="text-yellow-700" />
                   <h3 className="font-heading text-xl font-bold tracking-tight">
-                    Revenue &amp; Collections Ledger (Admin Only)
+                    Revenue &amp; Collections Ledger
                   </h3>
                 </div>
                 <div className="flex items-center gap-2">
