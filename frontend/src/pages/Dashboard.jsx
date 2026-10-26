@@ -49,8 +49,8 @@ export default function Dashboard() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locations, setLocations] = useState(["Khajaguda", "Attapur", "Madhapur"]);
-  // Managers only run the Khajaguda branch, so their dashboard is locked to it
-  const [selectedLocation, setSelectedLocation] = useState(isManager ? "Khajaguda" : "");
+  // Start on the branch picked in the sidebar instead of all branches
+  const [selectedLocation, setSelectedLocation] = useState(user?.location || "");
 
   const loadAdminData = async (loc = selectedLocation) => {
     const locParam = loc ? `?location=${encodeURIComponent(loc)}` : "";
@@ -106,6 +106,15 @@ export default function Dashboard() {
     }
     // eslint-disable-next-line
   }, [user?.role, user?.id]);
+
+  // Follow the branch picked in the sidebar
+  useEffect(() => {
+    const loc = user?.location || "";
+    if (!isManagerOrAdmin || loc === selectedLocation) return;
+    setSelectedLocation(loc);
+    loadAdminData(loc).catch(() => toast.error("Failed to load dashboard data"));
+    // eslint-disable-next-line
+  }, [user?.location]);
 
   // Trainer student class attendance mark
   const markStudentClass = async (classId, status, studentName, num) => {
@@ -421,9 +430,6 @@ export default function Dashboard() {
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-zinc-200 shadow-sm">
             <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Branch:</span>
-            {isManager ? (
-              <span className="text-xs font-bold text-zinc-900">{selectedLocation}</span>
-            ) : (
             <select
               value={selectedLocation}
               onChange={(e) => {
@@ -440,7 +446,6 @@ export default function Dashboard() {
                 </option>
               ))}
             </select>
-            )}
           </div>
           <div className="font-mono-data text-xs text-zinc-500">
             {new Date().toDateString().toUpperCase()}

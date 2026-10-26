@@ -32,8 +32,11 @@ export default function Reports() {
 
   const [period, setPeriod] = useState("weekly"); // "weekly" | "monthly" | "daily"
   const [locations, setLocations] = useState(["Khajaguda", "Attapur", "Madhapur"]);
-  // Managers only run the Khajaguda branch, so their reports are locked to it
-  const [selectedLocation, setSelectedLocation] = useState(isManager ? "Khajaguda" : "");
+  // Start on the branch picked in the sidebar and follow it when it changes
+  const [selectedLocation, setSelectedLocation] = useState(user?.location || "");
+  useEffect(() => {
+    setSelectedLocation(user?.location || "");
+  }, [user?.location]);
 
   const allLocations = useMemo(() => {
     const set = new Set(["Khajaguda", "Attapur", "Madhapur"]);
@@ -162,16 +165,6 @@ export default function Reports() {
           </p>
 
           {/* Quick Branch Switcher Pills */}
-          {isManager ? (
-            <div className="flex items-center gap-1.5 mt-3">
-              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mr-1">
-                Branch:
-              </span>
-              <span className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider border bg-blue-700 text-white border-blue-700 shadow-sm">
-                📍 {selectedLocation}
-              </span>
-            </div>
-          ) : (
           <div className="flex items-center gap-1.5 mt-3 flex-wrap">
             <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mr-1">
               Branch:
@@ -204,13 +197,11 @@ export default function Reports() {
               </button>
             ))}
           </div>
-          )}
         </div>
 
         {/* Filters and Controls */}
         <div className="flex items-end gap-3 flex-wrap">
           {/* Branch Location Dropdown */}
-          {!isManager && (
           <div className="flex flex-col">
             <label htmlFor="report-branch-select" className="label-tag mb-1 flex items-center gap-1 text-[10px]">
               <MapPin size={11} weight="bold" /> Branch Location
@@ -232,7 +223,6 @@ export default function Reports() {
               </select>
             </div>
           </div>
-          )}
 
           {isManagerOrAdmin && (
             <button

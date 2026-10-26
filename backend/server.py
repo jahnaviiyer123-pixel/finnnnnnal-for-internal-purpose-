@@ -117,7 +117,6 @@ logger = logging.getLogger("ridewell")
 JWT_SECRET = os.environ.get("JWT_SECRET", "devsecret")
 JWT_ALG = "HS256"
 ACCESS_MIN = 60 * 12  # 12 hours
-MANAGER_BRANCH = "Khajaguda"  # Managers only see this branch in reports
 
 
 def hash_password(password: str) -> str:
@@ -1952,8 +1951,6 @@ async def dashboard_stats(location: Optional[str] = None, user: dict = Depends(g
     target_location = None
     if user.get("role") == "trainer":
         target_location = user.get("location")
-    elif user.get("role") == "manager":
-        target_location = MANAGER_BRANCH
     elif location:
         target_location = location
 
@@ -2117,11 +2114,9 @@ async def reports_summary(
         s_date = start_date or today_dt.isoformat()
         e_date = end_date or s_date
 
-    # Determine target location filter (managers only run the Khajaguda branch)
+    # Determine target location filter
     target_location = None
-    if user.get("role") == "manager":
-        target_location = MANAGER_BRANCH
-    elif location and location.strip():
+    if location and location.strip():
         target_location = location.strip()
 
     # 1. Fetch Students & Trainers (branch filtered + all students for name resolution)
