@@ -117,6 +117,7 @@ logger = logging.getLogger("ridewell")
 JWT_SECRET = os.environ.get("JWT_SECRET", "devsecret")
 JWT_ALG = "HS256"
 ACCESS_MIN = 60 * 12  # 12 hours
+MANAGER_BRANCH = "Khajaguda"  # Managers only see this branch in reports
 
 
 def hash_password(password: str) -> str:
@@ -1392,8 +1393,11 @@ async def update_class(class_id: str, body: ClassUpdate, user: dict = Depends(ge
     if updates.get("status") == "missed":
         updates["status"] = "absent"
 
-    # If marked absent, ensure completed_date is cleared
+    # Absent is recorded on the day it was marked so it shows on that day's schedule
     if updates.get("status") == "absent" and "completed_date" not in updates:
+        updates["completed_date"] = date.today().isoformat()
+    # Back to pending means the class hasn't happened on any day yet
+    if updates.get("status") == "pending" and "completed_date" not in updates:
         updates["completed_date"] = None
 
     updates["updated_at"] = _now_iso()
@@ -2107,9 +2111,11 @@ async def reports_summary(
         s_date = start_date or today_dt.isoformat()
         e_date = end_date or s_date
 
-    # Determine target location filter
+    # Determine target location filter (managers only run the Khajaguda branch)
     target_location = None
-    if location and location.strip():
+    if user.get("role") == "manager":
+        target_location = MANAGER_BRANCH
+    elif location and location.strip():
         target_location = location.strip()
 
     # 1. Fetch Students & Trainers (branch filtered + all students for name resolution)
@@ -2159,9 +2165,13 @@ async def reports_summary(
         cq["student_id"] = {"$in": list(student_ids)}
     completed_classes_task = db.classes.find(cq, {"_id": 0}).sort("completed_date", -1).to_list(2000)
 
+    # Absences are dated by the day they were marked; older records without that date fall back to scheduled_date
     mq = {
         "status": {"$in": ["absent", "missed"]},
-        "scheduled_date": {"$gte": s_date, "$lte": e_date},
+        "$or": [
+            {"completed_date": {"$gte": s_date, "$lte": e_date}},
+            {"completed_date": None, "scheduled_date": {"$gte": s_date, "$lte": e_date}},
+        ],
     }
     if target_location:
         mq["student_id"] = {"$in": list(student_ids)}

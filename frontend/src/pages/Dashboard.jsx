@@ -111,7 +111,7 @@ export default function Dashboard() {
     try {
       const today = new Date().toISOString().slice(0, 10);
       const payload = { status };
-      if (status === "completed") payload.completed_date = today;
+      if (status === "completed" || status === "absent") payload.completed_date = today;
       await api.patch(`/classes/${classId}`, payload);
       const label = status === "completed" ? "Present" : status === "absent" ? "Absent" : status;
       toast.success(`Class ${num} for ${studentName} marked ${label}`);

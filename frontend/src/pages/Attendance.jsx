@@ -115,7 +115,7 @@ function StudentAttendance({ user, isAdmin }) {
   const markClass = async (classId, status, studentName, classNumber) => {
     try {
       const payload = { status };
-      if (status === "completed") payload.completed_date = date;
+      if (status === "completed" || status === "absent") payload.completed_date = date;
       await api.patch(`/classes/${classId}`, payload);
       const label = status === "completed" ? "Present" : status === "absent" ? "Absent" : status;
       toast.success(`Class ${classNumber} for ${studentName} marked ${label}`);
@@ -323,7 +323,8 @@ function StudentAttendance({ user, isAdmin }) {
                 const todayClass = studentClasses.find(
                   (c) =>
                     c.completed_date === date ||
-                    ((c.status === "absent" || c.status === "missed") && c.updated_at && c.updated_at.startsWith(date))
+                    // Older absences were saved without a date, so fall back to when they were marked
+                    (!c.completed_date && (c.status === "absent" || c.status === "missed") && c.updated_at && c.updated_at.startsWith(date))
                 );
 
                 return (

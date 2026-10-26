@@ -602,7 +602,7 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
     try {
       const today = new Date().toISOString().slice(0, 10);
       const payload = { status };
-      if (status === "completed") payload.completed_date = today;
+      if (status === "completed" || status === "absent") payload.completed_date = today;
       await api.patch(`/classes/${cls.id}`, payload);
       const label = status === "completed" ? "Present" : status === "absent" ? "Absent" : status;
       toast.success(`Class ${cls.class_number} marked as ${label}`);

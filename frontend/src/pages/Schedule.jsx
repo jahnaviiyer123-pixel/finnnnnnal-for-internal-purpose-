@@ -170,7 +170,7 @@ export default function Schedule() {
   const markClass = async (classId, status, studentName, num) => {
     try {
       const payload = { status };
-      if (status === "completed") payload.completed_date = date;
+      if (status === "completed" || status === "absent") payload.completed_date = date;
       await api.patch(`/classes/${classId}`, payload);
       const label = status === "completed" ? "Present" : status === "absent" ? "Absent" : status;
       toast.success(`Class ${num} for ${studentName} marked ${label}`);
