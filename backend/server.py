@@ -1013,15 +1013,15 @@ async def create_student(body: StudentCreate, user: dict = Depends(get_current_u
         "pickup_trainer_id": body.pickup_trainer_id,
         "drop_trainer_id": body.drop_trainer_id,
         "photo_url": body.photo_url,
-        "fees_total": body.fees_total if user.get("role") == "admin" else (body.fees_total or 0),
-        "fees_paid": body.fees_paid if user.get("role") == "admin" else (body.fees_paid or 0),
+        "fees_total": body.fees_total if user.get("role") in ("admin", "manager") else (body.fees_total or 0),
+        "fees_paid": body.fees_paid if user.get("role") in ("admin", "manager") else (body.fees_paid or 0),
         "notes": body.notes,
         "status": "active",
         "created_at": _now_iso(),
     }
     await db.students.insert_one(doc)
     
-    # Automatically record initial payment in transaction ledger (admin only)
+    # Automatically record initial payment in transaction ledger (manager or admin)
     if doc["fees_paid"] > 0:
         payment_doc = {
             "id": str(uuid.uuid4()),
@@ -1288,8 +1288,39 @@ async def update_student(student_id: str, body: StudentUpdate, user: dict = Depe
         if trainer_loc and existing.get("location") and existing.get("location") != trainer_loc and existing.get("assigned_trainer_id") != user["id"]:
             raise HTTPException(status_code=403, detail="Cannot edit student outside your location")
     updates = {k: v for k, v in body.model_dump(exclude_none=True).items()}
+    if user.get("role") == "trainer":
+        updates.pop("fees_total", None)
+        updates.pop("fees_paid", None)
+
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    # If fees_paid increased, record the delta as a new payment
+    new_fees_paid = updates.get("fees_paid")
+    old_fees_paid = existing.get("fees_paid", 0) or 0
+    if new_fees_paid is not None and new_fees_paid > old_fees_paid and user.get("role") in ("admin", "manager"):
+        delta = new_fees_paid - old_fees_paid
+        payment_doc = {
+            "id": str(uuid.uuid4()),
+            "student_id": student_id,
+            "amount": delta,
+            "date": date.today().isoformat(),
+            "method": "cash",
+            "notes": "Updated fees payment",
+            "recorded_by": user["id"],
+            "created_at": _now_iso(),
+        }
+        await db.payments.insert_one(payment_doc)
+        logger.info("Recorded additional payment of %d for student %s", delta, student_id)
+
+    # If assigned_trainer_id updated, sync pending classes
+    new_trainer_id = updates.get("assigned_trainer_id")
+    if new_trainer_id:
+        await db.classes.update_many(
+            {"student_id": student_id, "status": "pending"},
+            {"$set": {"trainer_id": new_trainer_id, "updated_at": _now_iso()}}
+        )
+
     await target_coll.update_one({"id": student_id}, {"$set": updates})
     invalidate_stats()
     return await target_coll.find_one({"id": student_id}, {"_id": 0})
@@ -1400,6 +1431,7 @@ async def update_class(class_id: str, body: ClassUpdate, user: dict = Depends(ge
 async def list_attendance(
     date: Optional[str] = None,
     trainer_id: Optional[str] = None,
+    location: Optional[str] = None,
     user: dict = Depends(get_current_user),
 ):
     q = {}
@@ -1407,6 +1439,13 @@ async def list_attendance(
         q["date"] = date
     if trainer_id:
         q["trainer_id"] = trainer_id
+
+    # If location is provided and not trainer_id, scope to trainers of that location
+    if location and not trainer_id and user.get("role") != "trainer":
+        loc_re = {"$regex": f"^{location.strip()}$", "$options": "i"}
+        trainers_in_loc = await db.users.find({"role": "trainer", "location": loc_re}, {"id": 1, "_id": 0}).to_list(500)
+        t_ids = [t["id"] for t in trainers_in_loc if "id" in t]
+        q["trainer_id"] = {"$in": t_ids}
 
     # If user is a trainer, strictly limit to their own attendance records
     if user.get("role") == "trainer":
@@ -1634,8 +1673,14 @@ async def schedule_today(
     student_q = {"status": "active"}
     trainer_q = {"role": "trainer"}
     if target_location:
-        student_q["location"] = target_location
-        trainer_q["location"] = target_location
+        loc_re = {"$regex": f"^{re.escape(target_location)}$", "$options": "i"}
+        loc_trainers = await db.users.find({"role": "trainer", "location": loc_re}, {"id": 1}).to_list(100)
+        loc_trainer_ids = [t["id"] for t in loc_trainers if "id" in t]
+        student_q["$or"] = [
+            {"location": loc_re},
+            {"assigned_trainer_id": {"$in": loc_trainer_ids}},
+        ]
+        trainer_q["location"] = loc_re
 
     slots = await db.slots.find({}, {"_id": 0}).sort("start_time", 1).to_list(100)
     students = await db.students.find(
@@ -2067,17 +2112,21 @@ async def reports_summary(
     if location and location.strip():
         target_location = location.strip()
 
-    # 1. Fetch Students (branch filtered + all students for name resolution)
+    # 1. Fetch Students & Trainers (branch filtered + all students for name resolution)
     sq = {}
-    if target_location:
-        sq["location"] = target_location
-    students_task = db.students.find(sq, {"_id": 0}).to_list(2000)
-    all_students_task = db.students.find({}, {"_id": 0, "id": 1, "name": 1, "location": 1, "slot_time": 1}).to_list(3000)
-
-    # 2. Fetch Trainers (branch filtered + all trainers for name resolution)
     tq = {"role": "trainer"}
     if target_location:
-        tq["location"] = target_location
+        loc_re = {"$regex": f"^{target_location}$", "$options": "i"}
+        loc_trainers = await db.users.find({"role": "trainer", "location": loc_re}, {"id": 1, "_id": 0}).to_list(500)
+        loc_t_ids = [t["id"] for t in loc_trainers if "id" in t]
+        sq["$or"] = [
+            {"location": loc_re},
+            {"assigned_trainer_id": {"$in": loc_t_ids}},
+        ]
+        tq["location"] = loc_re
+
+    students_task = db.students.find(sq, {"_id": 0}).to_list(2000)
+    all_students_task = db.students.find({}, {"_id": 0, "id": 1, "name": 1, "location": 1, "slot_time": 1}).to_list(3000)
     trainers_task = db.users.find(tq, {"_id": 0, "password_hash": 0}).to_list(500)
     all_trainers_task = db.users.find({"role": "trainer"}, {"_id": 0, "id": 1, "name": 1, "location": 1}).to_list(500)
 

@@ -84,6 +84,7 @@ function StudentAttendance({ user, isAdmin }) {
   const [query, setQuery] = useState("");
   const [filterSlot, setFilterSlot] = useState("");
   const [filterTrainer, setFilterTrainer] = useState("");
+  const [filterMode, setFilterMode] = useState("all"); // "all" | "absent"
   const [slots, setSlots] = useState([]);
 
   const load = async () => {
@@ -133,6 +134,14 @@ function StudentAttendance({ user, isAdmin }) {
 
   const trainerName = (tid) => trainers.find((t) => t.id === tid)?.name || "—";
 
+  const getAbsentCount = (s) => {
+    const studentClasses = classes[s.id] || [];
+    const fromClasses = studentClasses.filter((c) => c.status === "absent" || c.status === "missed").length;
+    return fromClasses > 0 ? fromClasses : (s.classes_absent || 0);
+  };
+
+  const totalAbsentees = students.filter((s) => getAbsentCount(s) > 0).length;
+
   // Filters
   let filtered = students;
   if (query) {
@@ -148,9 +157,12 @@ function StudentAttendance({ user, isAdmin }) {
   if (filterTrainer) {
     filtered = filtered.filter((s) => s.assigned_trainer_id === filterTrainer);
   }
+  if (filterMode === "absent") {
+    filtered = filtered.filter((s) => getAbsentCount(s) > 0);
+  }
   // For trainer view: only show their assigned students
   if (!isAdmin) {
-    filtered = filtered.filter((s) => s.assigned_trainer_id === user.id);
+    filtered = filtered.filter((s) => s.assigned_trainer_id === user?.id);
   }
 
   // Sort by slot_time
@@ -240,6 +252,33 @@ function StudentAttendance({ user, isAdmin }) {
           </select>
         )}
 
+        {/* All vs Absent Filter Tabs */}
+        <div className="flex border border-zinc-300">
+          <button
+            type="button"
+            onClick={() => setFilterMode("all")}
+            className={`px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
+              filterMode === "all" ? "bg-zinc-900 text-white" : "bg-white text-zinc-700 hover:bg-zinc-100"
+            }`}
+          >
+            All Students ({students.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode("absent")}
+            className={`px-3 py-2 text-xs font-bold uppercase tracking-wider border-l border-zinc-300 transition-colors flex items-center gap-1.5 ${
+              filterMode === "absent" ? "bg-red-600 text-white" : "bg-white text-red-700 hover:bg-red-50"
+            }`}
+          >
+            <span>Absentees</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono-data font-bold ${
+              filterMode === "absent" ? "bg-white text-red-700" : "bg-red-100 text-red-800"
+            }`}>
+              {totalAbsentees}
+            </span>
+          </button>
+        </div>
+
         <div className="label-tag whitespace-nowrap">{filtered.length} students</div>
       </div>
 
@@ -249,7 +288,9 @@ function StudentAttendance({ user, isAdmin }) {
           <Users size={32} className="text-zinc-300 mx-auto mb-3" />
           <div className="font-semibold text-zinc-700">No active students found</div>
           <p className="text-xs text-zinc-500 mt-1">
-            {!isAdmin
+            {filterMode === "absent"
+              ? "Great! No students with recorded absences."
+              : !isAdmin
               ? "No students are assigned to you yet."
               : "Try adjusting your filters."}
           </p>
@@ -263,6 +304,7 @@ function StudentAttendance({ user, isAdmin }) {
                 <th className="label-tag p-3 hidden md:table-cell">Phone</th>
                 <th className="label-tag p-3 hidden md:table-cell">Slot</th>
                 <th className="label-tag p-3 hidden lg:table-cell">Trainer</th>
+                <th className="label-tag p-3 text-center">Absent</th>
                 <th className="label-tag p-3 text-center">Progress</th>
                 <th className="label-tag p-3 text-right">Mark Today's Class</th>
               </tr>
@@ -273,9 +315,7 @@ function StudentAttendance({ user, isAdmin }) {
                 const completed = studentClasses.filter(
                   (c) => c.status === "completed"
                 ).length;
-                const absentCount = studentClasses.filter(
-                  (c) => c.status === "absent" || c.status === "missed"
-                ).length;
+                const absentCount = getAbsentCount(s);
                 const nextPending = studentClasses.find(
                   (c) => c.status === "pending"
                 );
@@ -318,6 +358,15 @@ function StudentAttendance({ user, isAdmin }) {
                     <td className="p-3 hidden lg:table-cell text-xs">
                       {trainerName(s.assigned_trainer_id)}
                     </td>
+                    <td className="p-3 text-center font-mono-data">
+                      {absentCount > 0 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                          {absentCount} absent
+                        </span>
+                      ) : (
+                        <span className="text-xs text-zinc-400">0</span>
+                      )}
+                    </td>
                     <td className="p-3 text-center">
                       <div className="inline-flex items-center gap-2">
                         <span className="font-mono-data text-xs font-bold">
@@ -332,11 +381,6 @@ function StudentAttendance({ user, isAdmin }) {
                           />
                         </span>
                       </div>
-                      {absentCount > 0 && (
-                        <div className="text-[10px] text-red-600 font-bold tracking-tight mt-0.5">
-                          {absentCount} absentee{absentCount > 1 ? "s" : ""}
-                        </div>
-                      )}
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-end gap-2">
@@ -422,10 +466,10 @@ function TrainerAttendance() {
     const locParam = locFilter ? `?location=${encodeURIComponent(locFilter)}` : "";
     const [t, a] = await Promise.all([
       api.get(`/trainers${locParam}`),
-      api.get(`/attendance?date=${date}`),
+      api.get(`/attendance?date=${date}${locFilter ? `&location=${encodeURIComponent(locFilter)}` : ""}`),
     ]);
-    setTrainers(t.data);
-    setRecords(a.data);
+    setTrainers(t.data || []);
+    setRecords(a.data || []);
   };
 
   useEffect(() => {
@@ -483,11 +527,14 @@ function TrainerAttendance() {
     setDate(d.toISOString().slice(0, 10));
   };
 
-  // Summary counts
-  const presentCount = records.filter((r) => r.status === "present").length;
-  const absentCount = records.filter((r) => r.status === "absent").length;
-  const leaveCount = records.filter((r) => r.status === "leave").length;
-  const unmarked = trainers.length - records.length;
+  // Summary counts strictly mapped to the current branch/trainers
+  const trainerIds = new Set(trainers.map((t) => t.id));
+  const activeRecords = records.filter((r) => trainerIds.has(r.trainer_id));
+  const presentCount = activeRecords.filter((r) => r.status === "present").length;
+  const absentCount = activeRecords.filter((r) => r.status === "absent").length;
+  const leaveCount = activeRecords.filter((r) => r.status === "leave").length;
+  const markedTrainerIds = new Set(activeRecords.map((r) => r.trainer_id));
+  const unmarked = Math.max(0, trainers.length - markedTrainerIds.size);
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -530,6 +577,12 @@ function TrainerAttendance() {
         </div>
         <div className="bento p-4 flex items-center gap-4 justify-between flex-wrap">
           <div className="flex items-center gap-4">
+            <div className="text-center pr-3 border-r border-zinc-200">
+              <div className="font-heading text-2xl font-black tracking-tighter text-zinc-900">
+                {trainers.length}
+              </div>
+              <div className="label-tag">Trainers</div>
+            </div>
             <div className="text-center">
               <div className="font-heading text-2xl font-black tracking-tighter text-emerald-700">
                 {presentCount}

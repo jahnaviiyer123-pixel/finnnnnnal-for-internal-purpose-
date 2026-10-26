@@ -32,7 +32,8 @@ export default function Schedule() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all"); // all | mine
+  const [loadError, setLoadError] = useState(null);
+  const [filter, setFilter] = useState("all"); // all | mine | unassigned_trainer
   const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
   const [selectedLocation, setSelectedLocation] = useState(isManagerOrAdmin ? "" : (user?.location || "Khajaguda"));
 
@@ -68,9 +69,15 @@ export default function Schedule() {
   }, []);
 
   const load = useCallback(async () => {
-    const locParam = selectedLocation ? `&location=${selectedLocation}` : "";
-    const { data } = await api.get(`/schedule/today?date=${date}${locParam}`);
-    setData(data);
+    setLoadError(null);
+    try {
+      const locParam = selectedLocation ? `&location=${encodeURIComponent(selectedLocation)}` : "";
+      const res = await api.get(`/schedule/today?date=${date}${locParam}`);
+      setData(res.data);
+    } catch (err) {
+      console.error("Failed to load schedule:", err);
+      setLoadError(formatApiError(err?.response?.data?.detail) || err.message || "Failed to load schedule");
+    }
   }, [date, selectedLocation]);
 
   const loadHolidays = useCallback(async () => {
@@ -87,10 +94,16 @@ export default function Schedule() {
   }, [calYear, calMonth, selectedLocation]);
 
   useEffect(() => {
+    let active = true;
     (async () => {
       setLoading(true);
-      try { await load(); } finally { setLoading(false); }
+      try {
+        await load();
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
+    return () => { active = false; };
   }, [load]);
 
   useEffect(() => {
@@ -100,18 +113,37 @@ export default function Schedule() {
   }, [viewMode, loadHolidays]);
 
   const trainerName = (id) =>
-    data?.trainers.find((t) => t.id === id)?.name || "—";
+    data?.trainers?.find((t) => t.id === id)?.name || "—";
 
   const isMine = (row) =>
     user && (row.assigned_trainer_id === user.id || row.pickup_trainer_id === user.id || row.drop_trainer_id === user.id);
 
-  const filterRows = (rows) => filter === "mine" ? rows.filter(isMine) : rows;
+  const filterRows = (rows) => {
+    if (!rows) return [];
+    if (filter === "mine") return rows.filter(isMine);
+    if (filter === "unassigned_trainer") return rows.filter((r) => !r.assigned_trainer_id);
+    return rows;
+  };
+
+  const unassignedTrainerTotal = (() => {
+    if (!data) return 0;
+    let count = 0;
+    Object.values(data.by_slot || {}).forEach((rows) => {
+      (rows || []).forEach((r) => {
+        if (!r.assigned_trainer_id) count++;
+      });
+    });
+    (data.unassigned || []).forEach((r) => {
+      if (!r.assigned_trainer_id) count++;
+    });
+    return count;
+  })();
 
   const myCounts = (() => {
     if (!data || !user) return null;
     let pickups = 0, drops = 0, classes = 0;
     Object.values(data.by_slot || {}).forEach((rows) => {
-      rows.forEach((r) => {
+      (rows || []).forEach((r) => {
         if (r.pickup_trainer_id === user.id) pickups++;
         if (r.drop_trainer_id === user.id) drops++;
         if (r.assigned_trainer_id === user.id) classes++;
@@ -124,6 +156,16 @@ export default function Schedule() {
     });
     return { pickups, drops, classes };
   })();
+
+  const assignTrainer = async (studentId, trainerId) => {
+    try {
+      await api.patch(`/students/${studentId}`, { assigned_trainer_id: trainerId });
+      toast.success("Trainer assigned successfully! Schedule synced.");
+      load();
+    } catch (err) {
+      toast.error(formatApiError(err?.response?.data?.detail) || err.message || "Failed to assign trainer");
+    }
+  };
 
   const markClass = async (classId, status, studentName, num) => {
     try {
@@ -279,6 +321,16 @@ export default function Schedule() {
                     data-testid="filter-mine"
                     className={`px-3 py-2 text-xs font-bold uppercase tracking-wider border-l border-zinc-300 ${filter === "mine" ? "bg-zinc-900 text-white" : "hover:bg-zinc-100"}`}
                   >Mine</button>
+                  {unassignedTrainerTotal > 0 && (
+                    <button
+                      onClick={() => setFilter(filter === "unassigned_trainer" ? "all" : "unassigned_trainer")}
+                      data-testid="filter-unassigned-trainer"
+                      className={`px-3 py-2 text-xs font-bold uppercase tracking-wider border-l border-zinc-300 ${filter === "unassigned_trainer" ? "bg-amber-600 text-white" : "text-amber-800 bg-amber-50 hover:bg-amber-100"}`}
+                      title="Students with no trainer assigned yet"
+                    >
+                      ⚠️ No Trainer ({unassignedTrainerTotal})
+                    </button>
+                  )}
                 </div>
               </div>
               <div>
@@ -399,8 +451,47 @@ export default function Schedule() {
             </div>
           )}
 
+          {unassignedTrainerTotal > 0 && filter !== "unassigned_trainer" && (
+            <div className="mb-4 p-3 bg-amber-50 border-2 border-amber-300 flex items-center justify-between gap-3 flex-wrap shadow-xs">
+              <div className="flex items-center gap-2 text-xs text-amber-950 font-bold">
+                <span className="px-2 py-0.5 bg-amber-500 text-white font-black text-[10px] uppercase tracking-wider">
+                  Attention Needed
+                </span>
+                <span>
+                  {unassignedTrainerTotal} student{unassignedTrainerTotal > 1 ? "s do" : " does"} not have a trainer assigned yet.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilter("unassigned_trainer")}
+                className="px-3 py-1 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold uppercase tracking-wider transition-colors"
+              >
+                Filter Unassigned Students ({unassignedTrainerTotal})
+              </button>
+            </div>
+          )}
+
           {loading ? (
-            <div className="label-tag animate-pulse">Loading…</div>
+            <div className="label-tag animate-pulse p-12 text-center bg-white border border-zinc-200">
+              Loading schedule & operations roster…
+            </div>
+          ) : loadError ? (
+            <div className="bento p-8 text-center bg-red-50 border-2 border-red-300">
+              <div className="font-heading font-black text-xl text-red-950 mb-2">
+                Unable to load schedule
+              </div>
+              <p className="text-xs text-red-800 mb-4">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoading(true);
+                  load().finally(() => setLoading(false));
+                }}
+                className="px-4 py-2 bg-red-800 hover:bg-red-900 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-colors"
+              >
+                Retry Loading Schedule
+              </button>
+            </div>
           ) : (
             <div className="space-y-4">
               {(data?.slots || []).length === 0 && (
@@ -412,8 +503,8 @@ export default function Schedule() {
                 </div>
               )}
 
-              {data?.slots.map((slot) => {
-                const allRows = data.by_slot[slot.label] || [];
+              {(data?.slots || []).map((slot) => {
+                const allRows = data?.by_slot?.[slot.label] || [];
                 const rows = filterRows(allRows);
                 return (
                   <div key={slot.id} className="bento p-6" data-testid={`slot-${slot.label}`}>
@@ -433,7 +524,13 @@ export default function Schedule() {
                     </div>
 
                     {rows.length === 0 ? (
-                      <div className="text-xs text-zinc-500 italic py-4">{filter === "mine" ? "Nothing assigned to you in this slot." : "No customers in this slot."}</div>
+                      <div className="text-xs text-zinc-500 italic py-4">
+                        {filter === "mine"
+                          ? "Nothing assigned to you in this slot."
+                          : filter === "unassigned_trainer"
+                          ? "No unassigned customers in this slot."
+                          : "No customers in this slot."}
+                      </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {rows.map((r) => (
@@ -442,7 +539,11 @@ export default function Schedule() {
                             row={r}
                             currentUserId={user?.id}
                             trainerName={trainerName}
+                            trainers={data?.trainers || []}
+                            isManagerOrAdmin={isManagerOrAdmin}
+                            isTrainer={user?.role === "trainer"}
                             onMark={markClass}
+                            onAssignTrainer={assignTrainer}
                           />
                         ))}
                       </div>
@@ -450,6 +551,55 @@ export default function Schedule() {
                   </div>
                 );
               })}
+
+              {/* Extra slots present in student records not in configured slots */}
+              {(() => {
+                const configuredLabels = new Set((data?.slots || []).map((s) => s.label));
+                const extraSlotLabels = Object.keys(data?.by_slot || {}).filter((l) => !configuredLabels.has(l));
+                if (extraSlotLabels.length === 0) return null;
+                return extraSlotLabels.map((slotLabel) => {
+                  const allRows = data?.by_slot?.[slotLabel] || [];
+                  const rows = filterRows(allRows);
+                  if (rows.length === 0 && filter !== "all") return null;
+                  return (
+                    <div key={`extra-slot-${slotLabel}`} className="bento p-6 border-l-4 border-l-blue-600">
+                      <div className="flex items-center justify-between mb-4 pb-4 border-b border-zinc-200 flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-blue-900 text-white px-3 py-2">
+                            <Clock size={20} weight="bold" />
+                          </div>
+                          <div>
+                            <div className="label-tag">Custom Slot</div>
+                            <h2 className="font-heading text-2xl font-black tracking-tighter font-mono-data">
+                              {formatSlot12(slotLabel)}
+                            </h2>
+                          </div>
+                        </div>
+                        <div className="label-tag">{rows.length} customers</div>
+                      </div>
+                      {rows.length === 0 ? (
+                        <div className="text-xs text-zinc-500 italic py-4">No customers in this slot.</div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {rows.map((r) => (
+                            <ScheduleCard
+                              key={r.id}
+                              row={r}
+                              currentUserId={user?.id}
+                              trainerName={trainerName}
+                              trainers={data?.trainers || []}
+                              isManagerOrAdmin={isManagerOrAdmin}
+                              isTrainer={user?.role === "trainer"}
+                              onMark={markClass}
+                              onAssignTrainer={assignTrainer}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
 
               {(() => {
                 const unassigned = filterRows(data?.unassigned || []);
@@ -472,7 +622,11 @@ export default function Schedule() {
                           row={r}
                           currentUserId={user?.id}
                           trainerName={trainerName}
+                          trainers={data?.trainers || []}
+                          isManagerOrAdmin={isManagerOrAdmin}
+                          isTrainer={user?.role === "trainer"}
                           onMark={markClass}
+                          onAssignTrainer={assignTrainer}
                         />
                       ))}
                     </div>
@@ -844,7 +998,7 @@ export default function Schedule() {
   );
 }
 
-function ScheduleCard({ row, trainerName, onMark }) {
+function ScheduleCard({ row, trainerName, trainers = [], isManagerOrAdmin = false, isTrainer = false, currentUserId = null, onMark, onAssignTrainer }) {
   const next = row.next_class;
   const todayCls = row.today_class;
   const targetCls = todayCls || next;
@@ -891,10 +1045,49 @@ function ScheduleCard({ row, trainerName, onMark }) {
       )}
 
       <div className="flex items-center gap-2 text-xs text-zinc-500 mb-3 flex-wrap">
-        <span className="inline-flex items-center gap-1">
-          <User size={11} weight="bold" />
-          {trainerName(row.assigned_trainer_id)}
-        </span>
+        {row.assigned_trainer_id ? (
+          <span className="inline-flex items-center gap-1 font-semibold text-zinc-800">
+            <User size={11} weight="bold" />
+            {trainerName(row.assigned_trainer_id)}
+          </span>
+        ) : (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-800 font-bold text-[10px] uppercase tracking-wider border border-red-300">
+              ⚠️ No Trainer Assigned
+            </span>
+            {isManagerOrAdmin && trainers.length > 0 && (
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    onAssignTrainer?.(row.id, e.target.value);
+                  }
+                }}
+                className="text-[11px] font-bold border border-red-400 bg-red-50 text-red-950 px-2 py-0.5 outline-none cursor-pointer"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <option value="">Assign Trainer…</option>
+                {trainers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.location ? `(${t.location})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            {isTrainer && currentUserId && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAssignTrainer?.(row.id, currentUserId);
+                }}
+                className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-blue-700 hover:bg-blue-800 text-white"
+              >
+                + Claim As My Student
+              </button>
+            )}
+          </div>
+        )}
         {targetCls && (
           <span className="font-mono-data">
             · Class {targetCls.class_number}/{row.total_classes || 10}

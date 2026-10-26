@@ -108,6 +108,8 @@ export default function StudentDetail() {
   const absentCount = classes.filter((c) => c.status === "absent" || c.status === "missed").length;
   const pending = (student.fees_total || 0) - (student.fees_paid || 0);
   const trainerName = (tid) => trainers.find((t) => t.id === tid)?.name || "—";
+  const activeLoc = (editForm.location || student.location || "").toLowerCase();
+  const branchTrainers = trainers.filter((t) => !t.location || !activeLoc || t.location.toLowerCase() === activeLoc);
 
   return (
     <div data-testid="student-detail-page">
@@ -251,20 +253,22 @@ export default function StudentDetail() {
               )}
             </div>
             <div>
-              <div className="label-tag mb-1.5">Trainer ({student.location || "Branch"})</div>
+              <div className="label-tag mb-1.5">Trainer ({editForm.location || student.location || "Branch"})</div>
               {editing ? (
                 <select
                   value={editForm.assigned_trainer_id || ""}
                   onChange={(e) => setEditForm({ ...editForm, assigned_trainer_id: e.target.value || null })}
-                  className="w-full border border-zinc-300 px-2 py-1.5 text-sm"
+                  className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-semibold"
                 >
                   <option value="">— Unassigned —</option>
-                  {trainers.filter((t) => !t.location || t.location === (student?.location || "Khajaguda")).map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.location || student.location})</option>
+                  {branchTrainers.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.location || student.location || "General"})</option>
                   ))}
                 </select>
               ) : (
-                <div className="text-sm font-semibold">{trainerName(student.assigned_trainer_id)}</div>
+                <div className={`text-sm font-semibold ${!student.assigned_trainer_id ? "text-red-600 font-bold" : ""}`}>
+                  {student.assigned_trainer_id ? trainerName(student.assigned_trainer_id) : "⚠️ No Trainer Assigned"}
+                </div>
               )}
             </div>
             <div>
@@ -299,7 +303,7 @@ export default function StudentDetail() {
                 <div className="text-sm font-semibold uppercase">{student.location || "Khajaguda"}</div>
               )}
             </div>
-            {isAdmin && editing && (
+            {isManagerOrAdmin && editing && (
               <>
                 <div>
                   <div className="label-tag mb-1.5">Total Fees (₹)</div>
@@ -343,7 +347,7 @@ export default function StudentDetail() {
               <div className="label-tag mb-3">Pickup &amp; drop</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <div className="label-tag mb-1.5">Pickup trainer ({student.location || "Branch"})</div>
+                  <div className="label-tag mb-1.5">Pickup trainer ({editForm.location || student.location || "Branch"})</div>
                   {editing ? (
                     <select
                       value={editForm.pickup_trainer_id || ""}
@@ -352,8 +356,8 @@ export default function StudentDetail() {
                       data-testid="pickup-trainer-edit"
                     >
                       <option value="">— None —</option>
-                      {trainers.filter((t) => !t.location || t.location === (student?.location || "Khajaguda")).map((t) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.location || student.location})</option>
+                      {branchTrainers.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.location || student.location || "General"})</option>
                       ))}
                     </select>
                   ) : (
@@ -361,7 +365,7 @@ export default function StudentDetail() {
                   )}
                 </div>
                 <div>
-                  <div className="label-tag mb-1.5">Drop trainer ({student.location || "Branch"})</div>
+                  <div className="label-tag mb-1.5">Drop trainer ({editForm.location || student.location || "Branch"})</div>
                   {editing ? (
                     <select
                       value={editForm.drop_trainer_id || ""}
@@ -370,8 +374,8 @@ export default function StudentDetail() {
                       data-testid="drop-trainer-edit"
                     >
                       <option value="">— None —</option>
-                      {trainers.filter((t) => !t.location || t.location === (student?.location || "Khajaguda")).map((t) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.location || student.location})</option>
+                      {branchTrainers.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.location || student.location || "General"})</option>
                       ))}
                     </select>
                   ) : (
@@ -432,7 +436,7 @@ export default function StudentDetail() {
             </div>
           )}
 
-          {isAdmin && (
+          {isManagerOrAdmin && (
             <div className="mt-6 pt-6 border-t border-zinc-200">
               <div className="label-tag">Fees</div>
               <div className="flex items-baseline gap-2 mt-2">

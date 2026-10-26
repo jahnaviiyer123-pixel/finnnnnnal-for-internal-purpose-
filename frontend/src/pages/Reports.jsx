@@ -122,7 +122,7 @@ export default function Reports() {
   const loadReport = useCallback(async () => {
     setLoading(true);
     try {
-      const locParam = selectedLocation ? `&location=${selectedLocation}` : "";
+      const locParam = selectedLocation ? `&location=${encodeURIComponent(selectedLocation)}` : "";
       const url = `/reports/summary?period=${period}&start_date=${dateRange.startDate}&end_date=${dateRange.endDate}${locParam}`;
       const { data } = await api.get(url);
       setReportData(data);
@@ -490,7 +490,7 @@ export default function Reports() {
                         </td>
                         <td className="py-3 px-3">
                           <span className="font-mono-data font-bold text-zinc-700">
-                            📍 {t.location || "Khajaguda"}
+                            📍 {t.location || "General / Unassigned"}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-center">

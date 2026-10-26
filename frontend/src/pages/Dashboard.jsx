@@ -49,31 +49,27 @@ export default function Dashboard() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locations, setLocations] = useState(["Khajaguda", "Attapur", "Madhapur"]);
-  const [selectedLocation, setSelectedLocation] = useState(isManagerOrAdmin ? "" : (user?.location || "Khajaguda"));
-
-  // State for Trainer
-  const [trainerSchedule, setTrainerSchedule] = useState(null);
-  const [myAttendance, setMyAttendance] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState("");
 
   const loadAdminData = async (loc = selectedLocation) => {
     const locParam = loc ? `?location=${encodeURIComponent(loc)}` : "";
     const [s, st] = await Promise.all([
       api.get(`/dashboard/stats${locParam}`),
-      api.get(`/students?limit=6${locParam ? `&location=${encodeURIComponent(loc)}` : ""}`),
+      api.get(`/students?limit=10${locParam ? `&location=${encodeURIComponent(loc)}` : ""}`),
     ]);
     setStats(s.data);
-    setStudents(st.data);
+    setStudents(st.data || []);
   };
 
   const loadTrainerData = async () => {
+    if (!user) return;
     const today = new Date().toISOString().slice(0, 10);
     const [st, sc, att] = await Promise.all([
       api.get(`/students?trainer_id=${user.id}&status=active`),
       api.get(`/schedule/today?date=${today}`),
       api.get(`/attendance?trainer_id=${user.id}&date=${today}`),
     ]);
-    setStudents(st.data);
+    setStudents(st.data || []);
     setTrainerSchedule(sc.data);
     if (att.data && att.data.length > 0) {
       setMyAttendance(att.data[0]);
@@ -85,10 +81,14 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      if (isManagerOrAdmin) {
-        api.get("/locations").then((r) => setLocations(r.data)).catch(() => {});
-        await loadAdminData();
-      } else {
+      if (user?.role === "admin" || user?.role === "manager") {
+        api.get("/locations").then((r) => {
+          if (r?.data && Array.isArray(r.data) && r.data.length > 0) {
+            setLocations(r.data);
+          }
+        }).catch(() => {});
+        await loadAdminData(selectedLocation);
+      } else if (user) {
         await loadTrainerData();
       }
     } catch (e) {
@@ -100,9 +100,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    load();
+    if (user) {
+      load();
+    }
     // eslint-disable-next-line
-  }, [user?.role]);
+  }, [user?.role, user?.id]);
 
   // Trainer student class attendance mark
   const markStudentClass = async (classId, status, studentName, num) => {

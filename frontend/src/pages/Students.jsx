@@ -43,11 +43,12 @@ function StudentAvatar({ url, name }) {
   );
 }
 
-function EnrollDialog({ open, onClose, trainers, onCreated }) {
+function EnrollDialog({ open, onClose, trainers, locations = ["Khajaguda", "Attapur", "Madhapur"], defaultLocation = "", onCreated }) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const isTrainer = user?.role === "trainer";
   const isManager = user?.role === "manager";
+  const isManagerOrAdmin = isAdmin || isManager;
   const today = new Date().toISOString().slice(0, 10);
   const [slots, setSlots] = useState([]);
   const [form, setForm] = useState({
@@ -57,7 +58,7 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
     age: "",
     gender: "",
     license_type: "gearless",
-    location: user?.location || "Khajaguda",
+    location: defaultLocation || user?.location || "Khajaguda",
     joining_date: today,
     slot_time: "",
     needs_pickup: false,
@@ -89,13 +90,13 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
     if (open) {
       setForm((prev) => ({
         ...prev,
-        location: isTrainer ? (user?.location || "Khajaguda") : prev.location,
+        location: isTrainer ? (user?.location || "Khajaguda") : (defaultLocation || prev.location || "Khajaguda"),
         assigned_trainer_id: isTrainer ? (user?.id || "") : prev.assigned_trainer_id,
         total_classes: 10,
       }));
       api.get("/slots").then((r) => setSlots(r.data)).catch(() => {});
     }
-  }, [open, user, isTrainer]);
+  }, [open, user, isTrainer, defaultLocation]);
 
   if (!open) return null;
 
@@ -120,8 +121,8 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
       if (!payload.pickup_address) delete payload.pickup_address;
       if (!payload.drop_address) delete payload.drop_address;
       payload.total_classes = Number(payload.total_classes) || 10;
-      payload.fees_total = isAdmin ? (Number(payload.fees_total) || 0) : 0;
-      payload.fees_paid = isAdmin ? (Number(payload.fees_paid) || 0) : 0;
+      payload.fees_total = isManagerOrAdmin ? (Number(payload.fees_total) || 0) : 0;
+      payload.fees_paid = isManagerOrAdmin ? (Number(payload.fees_paid) || 0) : 0;
       const { data } = await api.post("/students", payload);
       toast.success("Student enrolled with 10 working days schedule");
       onCreated(data);
@@ -182,9 +183,9 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
               </div>
             ) : (
               <select value={form.location} onChange={(e) => onLocationChange(e.target.value)} className={inputCls} data-testid="student-location-select">
-                <option value="Attapur">Attapur</option>
-                <option value="Khajaguda">Khajaguda</option>
-                <option value="Madhapur">Madhapur</option>
+                {locations.map((loc) => (
+                  <option key={loc} value={loc}>{loc} Branch</option>
+                ))}
               </select>
             )}
           </Field>
@@ -211,9 +212,13 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
                     <option key={t.id} value={t.id}>{t.name} ({t.location || activeLocation})</option>
                   ))}
                 </select>
-                {locationTrainers.length === 0 && (
+                {locationTrainers.length === 0 ? (
                   <span className="text-[10px] text-amber-700 font-bold block mt-1">
                     ⚠️ No trainers registered in {activeLocation} branch yet.
+                  </span>
+                ) : !form.assigned_trainer_id && (
+                  <span className="text-[10px] text-amber-700 font-bold block mt-1">
+                    ℹ️ Select a trainer so this student is placed on their daily schedule roster.
                   </span>
                 )}
               </>
@@ -235,13 +240,13 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
               ))}
             </select>
           </Field>
-          {isAdmin && (
+          {isManagerOrAdmin && (
             <>
-              <Field label="Fees Total (₹)">
-                <input type="number" value={form.fees_total} onChange={upd("fees_total")} className={inputCls} />
+              <Field label="Total Fee (₹)">
+                <input type="number" min="0" value={form.fees_total} onChange={upd("fees_total")} className={inputCls} placeholder="e.g. 5000" />
               </Field>
-              <Field label="Fees Paid (₹)">
-                <input type="number" value={form.fees_paid} onChange={upd("fees_paid")} className={inputCls} />
+              <Field label="Paid Amount (₹)">
+                <input type="number" min="0" value={form.fees_paid} onChange={upd("fees_paid")} className={inputCls} placeholder="e.g. 5000" />
               </Field>
             </>
           )}
@@ -332,7 +337,7 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin, isManage
           <th className="label-tag p-3 hidden sm:table-cell">Branch</th>
           <th className="label-tag p-3 hidden md:table-cell">Type</th>
           <th className="label-tag p-3 text-right">Progress</th>
-          {isAdmin && <th className="label-tag p-3 text-right">Fees</th>}
+          {isManagerOrAdmin && <th className="label-tag p-3 text-right">Fees (Paid / Due)</th>}
           <th className="label-tag p-3 text-right">Status</th>
           <th className="label-tag p-3 text-right">Actions</th>
         </tr>
@@ -415,12 +420,19 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin, isManage
                   </div>
                 )}
               </td>
-              {isAdmin && (
-                <td className="p-3 text-right font-mono-data text-xs">
+              {isManagerOrAdmin && (
+                <td className="p-3 text-right font-mono-data text-xs" onClick={(e) => e.stopPropagation()}>
+                  <div className="font-bold text-zinc-900">
+                    ₹{(s.fees_paid || 0).toLocaleString("en-IN")} paid
+                  </div>
                   {pending > 0 ? (
-                    <span className="text-red-700 font-bold">₹{pending.toLocaleString("en-IN")} due</span>
+                    <div className="text-[10px] text-red-600 font-bold">
+                      ₹{pending.toLocaleString("en-IN")} due
+                    </div>
                   ) : (
-                    <span className="text-emerald-700 font-bold">Paid</span>
+                    <div className="text-[10px] text-emerald-600 font-bold">
+                      Fully Paid
+                    </div>
                   )}
                 </td>
               )}
@@ -739,6 +751,8 @@ export default function Students() {
         open={open}
         onClose={() => setOpen(false)}
         trainers={trainers}
+        locations={locations}
+        defaultLocation={selectedLocation}
         onCreated={(createdStudent) => {
           load();
           if (createdStudent?.id) {
