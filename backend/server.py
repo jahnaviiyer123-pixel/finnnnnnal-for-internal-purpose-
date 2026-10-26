@@ -1147,7 +1147,7 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
         "10 WORKING DAYS COURSE: Training is strictly scheduled for 10 consecutive working days (skipping Sundays and officially declared school holidays/functions). Check your schedule card below for exact class dates.",
         "LEARNER LICENSE (LLR) MANDATORY: You must carry your valid Learner's License (physical copy or official mParivahan digital copy) during every single driving session. Driving without an LLR is strictly prohibited by law.",
         "SAFETY & ATTIRE: Wear comfortable, flat footwear (sneakers or closed shoes). High heels, loose sandals, or barefoot driving are strictly prohibited. Seatbelt / helmet must be fastened before turning on ignition.",
-        "ABSENCE & RESCHEDULING NOTICE: If an unavoidable emergency arises, you must notify your allotted trainer or branch manager in advance. Absences are recorded as 'Absent' in the official course ledger, and compensatory classes are arranged to ensure complete 10-day training.",
+        "ABSENCE & RESCHEDULING NOTICE: If an unavoidable emergency arises, notify your allotted trainer or branch manager in advance. Unattended sessions are marked as 'Absent' in the official 10-day training ledger.",
         f"BALANCE FEES: Any outstanding course balance (₹{int(fees_balance):,}) must be cleared on or before the 6th training session.",
         f"ALLOTTED TRAINER CONTACT: Your primary driving instructor is {assigned_trainer.get('name') if assigned_trainer else 'Assigned Instructor'} ({assigned_trainer.get('phone') if assigned_trainer else 'Branch Reception'}). Call directly for day-of pickup or vehicle coordination.",
     ]
@@ -1375,72 +1375,20 @@ async def update_class(class_id: str, body: ClassUpdate, user: dict = Depends(ge
     new_status = updates.get("status")
     student_id = existing["student_id"]
 
-    # 1. When marked Absent: Ensure student completes required course by adding compensatory class
-    if updated_class and new_status == "absent":
-        student = await db.students.find_one({"id": student_id})
-        if student:
-            target_total = student.get("total_classes", 10) or 10
-            active_or_pending = await db.classes.count_documents({
-                "student_id": student_id,
-                "status": {"$in": ["completed", "pending"]},
-            })
-            if active_or_pending < target_total:
-                deficit = target_total - active_or_pending
-                latest_class = await db.classes.find({"student_id": student_id}).sort("scheduled_date", -1).to_list(1)
-                start_date_str = latest_class[0].get("scheduled_date") if (latest_class and latest_class[0].get("scheduled_date")) else datetime.now(timezone.utc).date().isoformat()
-                try:
-                    last_dt = datetime.date.fromisoformat(start_date_str)
-                except Exception:
-                    last_dt = datetime.now(timezone.utc).date()
-
-                highest_class_num = await db.classes.find({"student_id": student_id}).sort("class_number", -1).to_list(1)
-                curr_max_num = highest_class_num[0].get("class_number", target_total) if highest_class_num else target_total
-
-                for _ in range(deficit):
-                    last_dt = last_dt + datetime.timedelta(days=1)
-                    while last_dt.weekday() == 6:  # Skip Sunday
-                        last_dt += datetime.timedelta(days=1)
-                    curr_max_num += 1
-                    makeup_doc = {
-                        "id": str(uuid.uuid4()),
-                        "student_id": student_id,
-                        "trainer_id": existing.get("trainer_id") or student.get("assigned_trainer_id"),
-                        "class_number": curr_max_num,
-                        "scheduled_date": last_dt.isoformat(),
-                        "status": "pending",
-                        "slot_time": existing.get("slot_time") or student.get("slot_time"),
-                        "notes": f"Compensatory class for absent Class {existing.get('class_number')}",
-                        "is_makeup": True,
-                        "makeup_for_class_id": class_id,
-                        "created_at": _now_iso(),
-                        "updated_at": _now_iso(),
-                    }
-                    await db.classes.insert_one(makeup_doc)
-                    logger.info("Added compensatory class %d on %s for student %s (absent in class %s)",
-                                curr_max_num, last_dt.isoformat(), student_id, existing.get("class_number"))
-
-    elif updated_class and prev_status in ("absent", "missed") and new_status in ("completed", "pending"):
-        # If reverted from absent to completed or pending, clean up any pending makeup class created for it
-        await db.classes.delete_one({
-            "student_id": student_id,
-            "makeup_for_class_id": class_id,
-            "status": "pending",
-        })
-
-    # 2. Check student course completion against their full required course quota
+    # Check student course completion when all scheduled classes are conducted
     if updated_class:
         student = await db.students.find_one({"id": student_id})
         if student:
-            target_total = student.get("total_classes", 10) or 10
-            completed = await db.classes.count_documents({"student_id": student_id, "status": "completed"})
+            total_classes = student.get("total_classes", 10) or 10
             pending = await db.classes.count_documents({"student_id": student_id, "status": "pending"})
-            if completed >= target_total and pending == 0:
+            marked_count = await db.classes.count_documents({"student_id": student_id, "status": {"$in": ["completed", "absent", "missed"]}})
+            if pending == 0 and marked_count >= total_classes:
                 await db.students.update_one(
                     {"id": student_id, "status": "active"},
                     {"$set": {"status": "completed", "completed_at": _now_iso()}},
                 )
-                logger.info("Auto-completed student %s (all %d required classes completed)", student_id, completed)
-            elif student.get("status") == "completed" and completed < target_total:
+                logger.info("Auto-completed student %s (all %d scheduled classes conducted)", student_id, total_classes)
+            elif student.get("status") == "completed" and pending > 0:
                 await db.students.update_one(
                     {"id": student_id},
                     {"$set": {"status": "active", "completed_at": None}},

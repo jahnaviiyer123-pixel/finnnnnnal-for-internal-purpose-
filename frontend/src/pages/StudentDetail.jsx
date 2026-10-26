@@ -425,7 +425,7 @@ export default function StudentDetail() {
                 </span>
               </div>
               <p className="text-[10px] text-zinc-500 mt-1">
-                Compensatory classes added to schedule to guarantee 10 full working days course.
+                Absences marked during the 10-day training course.
               </p>
             </div>
           )}
@@ -620,9 +620,6 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
     <tr className="border-b border-zinc-100 hover:bg-zinc-50" data-testid={`class-row-${cls.class_number}`}>
       <td className="p-3 font-mono-data text-xs font-bold">
         {cls.class_number}
-        {cls.is_makeup && (
-          <span className="block text-[8px] uppercase tracking-wider text-purple-700 font-extrabold">Makeup</span>
-        )}
       </td>
       <td className="p-3">
         {editing ? (
