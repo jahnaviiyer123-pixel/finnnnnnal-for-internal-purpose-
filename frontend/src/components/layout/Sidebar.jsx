@@ -133,7 +133,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
               {user?.role}
             </span>
             <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-blue-100 text-blue-900 font-bold uppercase tracking-wider">
-              <MapPin size={10} weight="bold" /> {user?.location || "Khajaguda"}
+              <MapPin size={10} weight="bold" /> {user?.location ? `${user.location} Branch` : "All Branches"}
             </span>
           </div>
 
@@ -143,12 +143,12 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                 Change Branch
               </label>
               <select
-                value={user?.location || "Khajaguda"}
+                value={user?.location || ""}
                 onChange={async (e) => {
                   const newLoc = e.target.value;
                   const res = await updateLocation(newLoc);
                   if (res.ok) {
-                    toast.success(`Active branch changed to ${newLoc}`);
+                    toast.success(newLoc ? `Active branch changed to ${newLoc}` : "Viewing all branches");
                   } else {
                     toast.error(res.error || "Failed to change branch");
                   }
@@ -156,6 +156,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                 className="w-full text-xs font-bold uppercase tracking-wider bg-white border border-zinc-300 px-2 py-1.5 outline-none cursor-pointer hover:border-zinc-900 focus:border-zinc-900 transition-colors"
                 data-testid="sidebar-branch-switcher"
               >
+                <option value="">All Branches</option>
                 <option value="Khajaguda">Khajaguda Branch</option>
                 <option value="Madhapur">Madhapur Branch</option>
                 <option value="Attapur">Attapur Branch</option>

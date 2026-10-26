@@ -321,18 +321,20 @@ export default function StudentDetail() {
                     className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-mono-data font-bold text-emerald-700"
                   />
                 </div>
-                <div>
-                  <div className="label-tag mb-1.5">Course Classes (Total)</div>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={editForm.total_classes ?? student.total_classes ?? 10}
-                    onChange={(e) => setEditForm({ ...editForm, total_classes: Number(e.target.value) || 10 })}
-                    className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-mono-data"
-                  />
-                </div>
               </>
+            )}
+            {editing && isManagerOrAdmin && (
+              <div>
+                <div className="label-tag mb-1.5">Course Classes (Total)</div>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={editForm.total_classes ?? student.total_classes ?? 10}
+                  onChange={(e) => setEditForm({ ...editForm, total_classes: Number(e.target.value) || 10 })}
+                  className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-mono-data"
+                />
+              </div>
             )}
           </div>
 

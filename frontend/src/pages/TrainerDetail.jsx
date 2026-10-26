@@ -307,24 +307,26 @@ export default function TrainerDetail() {
               )}
             </div>
 
-            {/* Base Salary */}
-            <div className="space-y-1">
-              <span className="label-tag flex items-center gap-1.5 text-zinc-500">
-                <CurrencyInr size={13} /> Base Salary
-              </span>
-              {editing ? (
-                <input
-                  type="number"
-                  value={editForm.base_salary}
-                  onChange={(e) => setEditForm({ ...editForm, base_salary: e.target.value })}
-                  className="w-full bg-white border border-zinc-300 px-2 py-1.5 text-sm"
-                />
-              ) : (
-                <div className="text-sm font-bold text-zinc-950">
-                  ₹{baseSalary.toLocaleString("en-IN")} / month
-                </div>
-              )}
-            </div>
+            {/* Base Salary (Admin only) */}
+            {isAdmin && (
+              <div className="space-y-1">
+                <span className="label-tag flex items-center gap-1.5 text-zinc-500">
+                  <CurrencyInr size={13} /> Base Salary
+                </span>
+                {editing ? (
+                  <input
+                    type="number"
+                    value={editForm.base_salary}
+                    onChange={(e) => setEditForm({ ...editForm, base_salary: e.target.value })}
+                    className="w-full bg-white border border-zinc-300 px-2 py-1.5 text-sm"
+                  />
+                ) : (
+                  <div className="text-sm font-bold text-zinc-950">
+                    ₹{baseSalary.toLocaleString("en-IN")} / month
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

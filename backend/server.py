@@ -228,7 +228,7 @@ class ManagerUpdate(BaseModel):
 
 
 class UserLocationUpdate(BaseModel):
-    location: str
+    location: Optional[str] = ""
 
 
 class LoginIn(BaseModel):
@@ -402,7 +402,7 @@ async def seed_admin():
             "name": "Branch Manager",
             "role": "manager",
             "status": "active",
-            "location": "Khajaguda",
+            "location": "",
             "phone": "+91 98765 43211",
             "photo_url": None,
             "created_at": _now_iso(),
@@ -414,8 +414,6 @@ async def seed_admin():
             updates["role"] = "manager"
         if existing_mgr.get("status") != "active":
             updates["status"] = "active"
-        if not existing_mgr.get("location"):
-            updates["location"] = "Khajaguda"
         if not verify_password(manager_password, existing_mgr["password_hash"]):
             updates["password_hash"] = hash_password(manager_password)
         if updates:
@@ -595,11 +593,11 @@ async def me(user: dict = Depends(get_current_user)):
 @api.patch("/auth/location")
 async def update_my_location(body: UserLocationUpdate, user: dict = Depends(get_current_user)):
     """Allow managers and admins to change/switch their active branch location."""
-    if user.get("role") not in ("admin", "manager"):
-        raise HTTPException(status_code=403, detail="Only managers and admins can change branch location")
-    loc = body.location.strip()
-    if not loc:
-        raise HTTPException(status_code=400, detail="Location cannot be empty")
+    raw_loc = (body.location or "").strip()
+    if raw_loc in ("All", "All Branches", "all", "ALL BRANCHES"):
+        loc = ""
+    else:
+        loc = raw_loc
     await db.users.update_one({"id": user["id"]}, {"$set": {"location": loc}})
     _user_cache.pop(user["id"], None)
     return await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})

@@ -48,8 +48,8 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [locations, setLocations] = useState([]);
-  const [selectedLocation, setSelectedLocation] = useState(user?.location || "");
+  const [locations, setLocations] = useState(["Khajaguda", "Attapur", "Madhapur"]);
+  const [selectedLocation, setSelectedLocation] = useState(isManagerOrAdmin ? "" : (user?.location || "Khajaguda"));
 
   // State for Trainer
   const [trainerSchedule, setTrainerSchedule] = useState(null);
