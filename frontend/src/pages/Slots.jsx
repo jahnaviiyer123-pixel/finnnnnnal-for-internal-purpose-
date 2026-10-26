@@ -13,6 +13,7 @@ export default function Slots() {
   const [saving, setSaving] = useState(false);
 
   const isAdmin = user?.role === "admin";
+  const isManagerOrAdmin = isAdmin || user?.role === "manager";
 
   const load = async () => {
     const { data } = await api.get("/slots");
@@ -67,7 +68,7 @@ export default function Slots() {
         </div>
       </div>
 
-      {isAdmin && (
+      {isManagerOrAdmin && (
         <form onSubmit={submit} className="bento p-6 mb-6" data-testid="add-slot-form">
           <div className="label-tag mb-3">Add new slot</div>
           <div className="flex items-end gap-3 flex-wrap">
@@ -123,7 +124,7 @@ export default function Slots() {
                     {formatSlot12(s.label)}
                   </div>
                 </div>
-                {isAdmin && (
+                {isManagerOrAdmin && (
                   <button onClick={() => remove(s.id)} className="p-1.5 hover:bg-red-600 hover:text-white">
                     <Trash size={14} weight="bold" />
                   </button>

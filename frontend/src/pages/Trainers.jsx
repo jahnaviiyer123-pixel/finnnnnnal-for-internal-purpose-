@@ -32,12 +32,11 @@ export default function Trainers() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
-  const [selectedLocation, setSelectedLocation] = useState(user?.role === "admin" ? "" : (user?.location || "Khajaguda"));
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", photo_url: null, location: user?.location || "Khajaguda" });
-
   const isAdmin = user?.role === "admin";
   const isManager = user?.role === "manager";
   const isManagerOrAdmin = isAdmin || isManager;
+  const [selectedLocation, setSelectedLocation] = useState(isManagerOrAdmin ? "" : (user?.location || "Khajaguda"));
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", photo_url: null, location: user?.location || "Khajaguda" });
 
   const load = async (loc = selectedLocation) => {
     const locParam = loc ? `&location=${loc}` : "";
@@ -166,7 +165,7 @@ export default function Trainers() {
                 className="bg-transparent text-xs font-bold uppercase tracking-wider outline-none cursor-pointer"
                 data-testid="trainer-branch-filter"
               >
-                {isAdmin && <option value="">All Branches</option>}
+                {isManagerOrAdmin && <option value="">All Branches</option>}
                 {locations.map((loc) => (
                   <option key={loc} value={loc}>{loc} Branch</option>
                 ))}
@@ -251,8 +250,8 @@ export default function Trainers() {
                     <button onClick={() => openEdit(t)} className="p-1.5 hover:bg-zinc-100" data-testid={`edit-trainer-${t.id}`}>
                       <PencilSimple size={14} weight="bold" />
                     </button>
-                    {isAdmin && (
-                      <button onClick={() => remove(t.id)} className="p-1.5 hover:bg-red-600 hover:text-white">
+                    {isManagerOrAdmin && (
+                      <button onClick={() => remove(t.id)} className="p-1.5 hover:bg-red-600 hover:text-white" title="Delete trainer">
                         <Trash size={14} weight="bold" />
                       </button>
                     )}

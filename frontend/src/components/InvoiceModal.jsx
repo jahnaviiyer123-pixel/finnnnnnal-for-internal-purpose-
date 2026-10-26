@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { api, formatApiError } from "@/lib/api";
 import { formatSlot12 } from "@/lib/utils";
 import {
@@ -16,6 +17,7 @@ import {
   CurrencyInr,
   MapPin,
   CheckCircle,
+  ArrowUpRight,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -140,7 +142,7 @@ export default function InvoiceModal({ studentId, open, onClose }) {
 • *Start Date:* ${formatShortDate(data.student?.joining_date)}
 • *Working Days:* Monday–Saturday
 • *Daily Duration:* 1 hour
-• *Validity:* ${data.validity || "12 calendar days"}
+• *Validity:* ${data.validity || "10 calendar days"}
 • *Sessions:* ${totalSessions} sessions
 
 *TRAINING SCHEDULE:*
@@ -155,7 +157,7 @@ ${scheduleLines}
 • *Received By:* ${data.received_by || "LEARN & DRIVE2"}
 
 *Important Instructions:*
-1. ${totalSessions} sessions, 1 hour daily; Monday–Saturday. Complete the course within 12 calendar days from joining.
+1. ${totalSessions} sessions, 1 hour daily; Monday–Saturday. Complete the course within 10 calendar days from joining.
 2. Shoes are mandatory. Please arrive 5 minutes before your slot.
 3. Carry valid Learner's License (LLR) during every session.
 
@@ -188,7 +190,11 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
       return;
     }
     const targetPhone = clean.length === 10 ? `91${clean}` : clean;
-    window.open(`https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`, "_blank");
+    const isMobile = typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const waUrl = isMobile
+      ? `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(message)}`
+      : `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(message)}`;
+    window.open(waUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleCopyText = () => {
@@ -209,57 +215,142 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
   const trainerPhone = allotment.assigned_trainer?.phone || "—";
   const isPaidInFull = Boolean(financials.is_fully_paid);
 
-  return (
+  const modalContent = (
     <div
+      id="invoice-modal-portal"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 md:p-6 pt-4 sm:pt-8 pb-16 overflow-y-auto"
+      className="invoice-modal-overlay fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 md:p-6 pt-4 sm:pt-8 pb-16 overflow-y-auto"
     >
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
+          @page {
+            size: A4 portrait;
+            margin: 6mm 8mm;
           }
-          #printable-receipt, #printable-receipt * {
-            visibility: visible;
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            background: #ffffff !important;
+            color: #09090b !important;
+            overflow: visible !important;
           }
-          #printable-receipt {
-            position: absolute;
-            left: 0;
-            top: 0;
+          /* Completely hide the background app tree so 0 ghost pages exist */
+          #root {
+            display: none !important;
+          }
+          #invoice-modal-portal {
+            display: block !important;
+            position: static !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            background: transparent !important;
+            overflow: visible !important;
+          }
+          .invoice-modal-overlay {
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            overflow: visible !important;
             width: 100% !important;
             max-width: 100% !important;
+            box-shadow: none !important;
+          }
+          .invoice-modal-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            border: none !important;
+            background: #ffffff !important;
+            color: #09090b !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            overflow: visible !important;
+            padding: 0 !important;
             margin: 0 !important;
-            padding: 16px !important;
+          }
+          .print-hide, .print\\:hidden {
+            display: none !important;
+          }
+          #printable-receipt {
+            position: static !important;
+            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
             background: #ffffff !important;
             color: #09090b !important;
             box-shadow: none !important;
             border: none !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
-          .print-border-hairline {
-            border-color: #e4e4e7 !important;
+          #printable-receipt * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          .print-bg-slate {
-            background-color: #f8fafc !important;
+          #printable-receipt table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
-          .print-text-dark {
-            color: #09090b !important;
+          #printable-receipt tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
-          .print-hide {
-            display: none !important;
+          #printable-receipt td,
+          #printable-receipt th {
+            padding: 2.5px 6px !important;
+            font-size: 10px !important;
+            line-height: 1.25 !important;
           }
-          table {
-            page-break-inside: auto;
+          #printable-receipt h1 {
+            font-size: 19px !important;
+            line-height: 1.15 !important;
+            margin: 1px 0 !important;
           }
-          tr {
-            page-break-inside: avoid;
-            page-break-after: auto;
+          #printable-receipt .receipt-header {
+            padding-bottom: 4px !important;
+            margin-bottom: 4px !important;
+          }
+          #printable-receipt .receipt-ribbon {
+            margin-top: 5px !important;
+            margin-bottom: 6px !important;
+            gap: 5px !important;
+          }
+          #printable-receipt .receipt-ribbon > div {
+            padding: 3px 6px !important;
+          }
+          #printable-receipt .section-block {
+            margin-bottom: 6px !important;
+          }
+          #printable-receipt .section-heading {
+            margin-bottom: 2px !important;
+            font-size: 9.5px !important;
+          }
+          #printable-receipt .terms-block {
+            padding: 5px 8px !important;
+            margin-bottom: 6px !important;
+            font-size: 9px !important;
+            line-height: 1.3 !important;
+          }
+          #printable-receipt .terms-block ul {
+            margin-top: 2px !important;
+          }
+          #printable-receipt .footer-block {
+            padding-top: 4px !important;
           }
         }
       `}</style>
 
-      <div className="w-full max-w-3xl bg-zinc-950 text-zinc-100 rounded-2xl border border-zinc-800 shadow-2xl overflow-hidden print:bg-white print:text-black print:border-none print:shadow-none print:rounded-none animate-in fade-in zoom-in-95 duration-150">
+      <div className="invoice-modal-container w-full max-w-3xl bg-zinc-950 text-zinc-100 rounded-2xl border border-zinc-800 shadow-2xl overflow-hidden print:bg-white print:text-black print:border-none print:shadow-none print:rounded-none animate-in fade-in zoom-in-95 duration-150">
         
         {/* Top Control Bar (Hidden when printed) */}
         <div className="px-4 py-3 bg-zinc-900/95 border-b border-zinc-800/90 flex items-center justify-between gap-2.5 flex-wrap print:hidden">
@@ -330,6 +421,17 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
               )}
             </button>
 
+            {/* Open in Dedicated New Tab */}
+            <a
+              href={`/students/${studentId}/invoice`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 active:scale-[0.97] text-xs font-medium rounded-lg transition-all duration-150"
+              title="Open Invoice in Dedicated Full Page Tab"
+            >
+              <ArrowUpRight size={14} weight="bold" /> New Tab
+            </a>
+
             {/* Print / Save as PDF */}
             <button
               onClick={handlePrint}
@@ -390,7 +492,7 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
             <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-amber-400/60 to-transparent mb-5 print-hide" />
 
             {/* Header / Academy Crest */}
-            <div className="flex flex-col items-center justify-center text-center pb-4 border-b border-zinc-800/80 print:border-zinc-300">
+            <div className="receipt-header flex flex-col items-center justify-center text-center pb-4 border-b border-zinc-800/80 print:border-zinc-300">
               
               {/* Refined Vector Emblem */}
               <div className="mb-2.5 flex items-center justify-center">
@@ -418,7 +520,7 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
                 GOVT. REGISTERED MOTOR DRIVING ACADEMY
               </div>
               <h1 className="font-heading text-2xl sm:text-3xl font-black tracking-tight text-white uppercase print:text-zinc-950">
-                LEARN &amp; DRIVE2
+                LEARN &amp; DRIVE 2
               </h1>
               <div className="text-xs font-semibold tracking-wider uppercase text-zinc-400 mt-0.5 print:text-zinc-600">
                 DIGITAL COURSE RECEIPT &amp; TRAINING SCHEDULE
@@ -429,7 +531,7 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
             </div>
 
             {/* Receipt Metadata Ribbon (Receipt No, Date, Payment Status) */}
-            <div className="my-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono-data">
+            <div className="receipt-ribbon my-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono-data">
               <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-lg p-2.5 flex flex-col justify-center print:bg-zinc-50 print:border-zinc-300">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 print:text-zinc-600 tracking-wider">
                   Receipt Number
@@ -475,8 +577,8 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
             </div>
 
             {/* SECTION 1: CLIENT & COURSE DETAILS */}
-            <div className="mb-4">
-              <div className="text-[11px] font-bold tracking-wider uppercase text-amber-400 mb-2 flex items-center gap-1.5 print:text-zinc-900">
+            <div className="section-block mb-4">
+              <div className="section-heading text-[11px] font-bold tracking-wider uppercase text-amber-400 mb-2 flex items-center gap-1.5 print:text-zinc-900">
                 <User size={13} weight="bold" />
                 <span>Client &amp; Course Credentials</span>
               </div>
@@ -563,7 +665,7 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
                         Course Validity
                       </td>
                       <td className="p-2.5 font-mono-data text-zinc-200 print:text-zinc-900">
-                        {data.validity || "12 calendar days"}
+                        {data.validity || "10 calendar days"}
                       </td>
                       <td className="p-2.5 font-semibold text-zinc-400 bg-zinc-900/40 print:bg-zinc-50 print:text-zinc-700">
                         Total Sessions
@@ -578,8 +680,8 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
             </div>
 
             {/* SECTION 2: TRAINING SCHEDULE MATRIX */}
-            <div className="mb-4">
-              <div className="text-[11px] font-bold tracking-wider uppercase text-amber-400 mb-2 flex items-center justify-between print:text-zinc-900">
+            <div className="section-block mb-4">
+              <div className="section-heading text-[11px] font-bold tracking-wider uppercase text-amber-400 mb-2 flex items-center justify-between print:text-zinc-900">
                 <span className="flex items-center gap-1.5">
                   <CalendarBlank size={13} weight="bold" />
                   <span>Training Schedule — {totalSessions} Daily Sessions</span>
@@ -620,7 +722,7 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
                             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
                               c.status === "completed"
                                 ? "bg-emerald-950/40 text-emerald-400 border border-emerald-500/30 print:bg-transparent print:text-emerald-700 print:border-none"
-                                : c.status === "missed"
+                                : (c.status === "absent" || c.status === "missed")
                                 ? "bg-rose-950/40 text-rose-400 border border-rose-500/30 print:bg-transparent print:text-rose-700 print:border-none"
                                 : "bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 print:bg-transparent print:text-zinc-600 print:border-none"
                             }`}
@@ -629,12 +731,12 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
                               className={`w-1.5 h-1.5 rounded-full ${
                                 c.status === "completed"
                                   ? "bg-emerald-400"
-                                  : c.status === "missed"
+                                  : (c.status === "absent" || c.status === "missed")
                                   ? "bg-rose-400"
                                   : "bg-zinc-500"
                               }`}
                             />
-                            {c.status === "completed" ? "Completed" : c.status === "missed" ? "Missed" : "Scheduled"}
+                            {c.status === "completed" ? "Completed" : (c.status === "absent" || c.status === "missed") ? "Absent" : "Scheduled"}
                           </span>
                         </td>
                       </tr>
@@ -645,8 +747,8 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
             </div>
 
             {/* SECTION 3: PAYMENT LEDGER */}
-            <div className="mb-4">
-              <div className="text-[11px] font-bold tracking-wider uppercase text-amber-400 mb-2 flex items-center gap-1.5 print:text-zinc-900">
+            <div className="section-block mb-4">
+              <div className="section-heading text-[11px] font-bold tracking-wider uppercase text-amber-400 mb-2 flex items-center gap-1.5 print:text-zinc-900">
                 <CurrencyInr size={13} weight="bold" />
                 <span>Payment Summary &amp; Financial Ledger</span>
               </div>
@@ -709,13 +811,13 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
             </div>
 
             {/* Terms & Important Instructions */}
-            <div className="p-3 bg-zinc-900/40 border border-zinc-800/60 rounded-xl text-[11px] text-zinc-400 space-y-1.5 mb-5 leading-relaxed print:bg-zinc-50 print:border-zinc-300 print:text-zinc-800 print:rounded-none">
+            <div className="terms-block p-3 bg-zinc-900/40 border border-zinc-800/60 rounded-xl text-[11px] text-zinc-400 space-y-1.5 mb-5 leading-relaxed print:bg-zinc-50 print:border-zinc-300 print:text-zinc-800 print:rounded-none">
               <div className="font-bold text-zinc-300 print:text-zinc-900 uppercase tracking-wider text-[10px]">
                 Important Course Terms:
               </div>
               <ul className="list-disc pl-4 space-y-1">
                 <li>
-                  <strong className="text-zinc-200 print:text-zinc-900">{totalSessions} sessions</strong>, 1 hour daily, Monday through Saturday. Complete all sessions within <strong>12 calendar days</strong> from the start date.
+                  <strong className="text-zinc-200 print:text-zinc-900">{totalSessions} sessions</strong>, 1 hour daily, Monday through Saturday. Complete all sessions within <strong>10 calendar days</strong> from the start date.
                 </li>
                 <li>
                   Shoes are <strong>mandatory</strong> during driving sessions. Please arrive at your allotted branch 5 minutes prior to your time slot.
@@ -727,10 +829,10 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
             </div>
 
             {/* Official Signature & Bottom Seal */}
-            <div className="pt-3 border-t border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left print:border-zinc-300">
+            <div className="footer-block pt-3 border-t border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left print:border-zinc-300">
               <div className="space-y-0.5">
                 <div className="font-heading font-black text-xs sm:text-sm tracking-wider uppercase text-amber-400 print:text-zinc-950">
-                  LEARN &amp; DRIVE2 MOTOR DRIVING ACADEMY
+                  LEARN &amp; DRIVE 2 MOTOR DRIVING ACADEMY
                 </div>
                 <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-zinc-500 print:text-zinc-600">
                   LEARN • RIDE • DRIVE WITH CONFIDENCE
@@ -751,4 +853,6 @@ _LEARN • RIDE • DRIVE WITH CONFIDENCE_`;
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : modalContent;
 }

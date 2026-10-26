@@ -60,7 +60,7 @@ def sync_student_to_google_sheet(student_data: Dict[str, Any], trainer_name: str
         "slot_time": student_data.get("slot_time") or "",
         "joining_date": student_data.get("joining_date") or "",
         "trainer": trainer_name,
-        "total_classes": student_data.get("total_classes", 12),
+        "total_classes": student_data.get("total_classes", 10),
         "fees_total": fees_total,
         "fees_paid": fees_paid,
         "balance_due": balance,

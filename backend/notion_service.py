@@ -82,7 +82,7 @@ def build_notion_properties(student_data: Dict[str, Any], trainer_name: str, sch
     branch = student_data.get("location") or "Khajaguda"
     status = (student_data.get("status") or "active").capitalize()
     slot_time = student_data.get("slot_time") or ""
-    total_classes = student_data.get("total_classes") or 12
+    total_classes = student_data.get("total_classes") or 10
     completed_classes = student_data.get("classes_completed") or 0
     fees_total = float(student_data.get("fees_total") or 0)
     fees_paid = float(student_data.get("fees_paid") or 0)

@@ -27,7 +27,7 @@ def run_cleanup():
     completed_classes = list(db.classes.find({
         "$or": [
             {"student_id": {"$in": list(completed_sids)}},
-            {"status": {"$in": ["completed", "missed"]}}
+            {"status": {"$in": ["completed", "missed", "absent"]}}
         ]
     }))
     pending_classes = list(db.classes.find({
@@ -60,7 +60,7 @@ def run_cleanup():
     del_cl_res = db.classes.delete_many({
         "$or": [
             {"student_id": {"$in": list(completed_sids)}},
-            {"status": {"$in": ["completed", "missed"]}}
+            {"status": {"$in": ["completed", "missed", "absent"]}}
         ]
     })
     print(f"-> Removed {del_cl_res.deleted_count} classes. Pending classes remaining: {db.classes.count_documents({})}")

@@ -10,8 +10,10 @@ import {
   SignOut,
   Clock,
   CalendarBlank,
+  MapPin,
 } from "@phosphor-icons/react";
 import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", Icon: Gauge },
@@ -24,11 +26,11 @@ const NAV = [
 ];
 
 const SETTINGS_NAV = [
-  { to: "/slots", label: "Slots", Icon: Clock, adminOnly: true },
+  { to: "/slots", label: "Slots", Icon: Clock, managerOrAdmin: true },
 ];
 
 export default function Sidebar({ isOpen, setIsOpen }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateLocation } = useAuth();
   const navigate = useNavigate();
 
   const onLogout = async () => {
@@ -89,10 +91,18 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           </NavLink>
         ))}
 
-        {SETTINGS_NAV.filter((n) => !n.adminOnly || user?.role === "admin").length > 0 && (
+        {SETTINGS_NAV.filter((n) => {
+          if (n.adminOnly) return user?.role === "admin";
+          if (n.managerOrAdmin) return user?.role === "admin" || user?.role === "manager";
+          return true;
+        }).length > 0 && (
           <>
             <div className="label-tag px-3 py-2 pt-6">Settings</div>
-            {SETTINGS_NAV.filter((n) => !n.adminOnly || user?.role === "admin").map(({ to, label, Icon }) => (
+            {SETTINGS_NAV.filter((n) => {
+              if (n.adminOnly) return user?.role === "admin";
+              if (n.managerOrAdmin) return user?.role === "admin" || user?.role === "manager";
+              return true;
+            }).map(({ to, label, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -118,9 +128,40 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           <div className="label-tag">Signed in as</div>
           <div className="text-sm font-semibold text-zinc-900 truncate">{user?.name}</div>
           <div className="text-xs text-zinc-500 truncate">{user?.email}</div>
-          <div className="mt-1 inline-block text-[10px] px-2 py-0.5 bg-yellow-400 text-zinc-900 font-bold uppercase tracking-wider">
-            {user?.role}
+          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+            <span className="inline-block text-[10px] px-2 py-0.5 bg-yellow-400 text-zinc-900 font-bold uppercase tracking-wider">
+              {user?.role}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-blue-100 text-blue-900 font-bold uppercase tracking-wider">
+              <MapPin size={10} weight="bold" /> {user?.location || "Khajaguda"}
+            </span>
           </div>
+
+          {(user?.role === "admin" || user?.role === "manager") && (
+            <div className="mt-2.5 pt-2 border-t border-zinc-200">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
+                Change Branch
+              </label>
+              <select
+                value={user?.location || "Khajaguda"}
+                onChange={async (e) => {
+                  const newLoc = e.target.value;
+                  const res = await updateLocation(newLoc);
+                  if (res.ok) {
+                    toast.success(`Active branch changed to ${newLoc}`);
+                  } else {
+                    toast.error(res.error || "Failed to change branch");
+                  }
+                }}
+                className="w-full text-xs font-bold uppercase tracking-wider bg-white border border-zinc-300 px-2 py-1.5 outline-none cursor-pointer hover:border-zinc-900 focus:border-zinc-900 transition-colors"
+                data-testid="sidebar-branch-switcher"
+              >
+                <option value="Khajaguda">Khajaguda Branch</option>
+                <option value="Madhapur">Madhapur Branch</option>
+                <option value="Attapur">Attapur Branch</option>
+              </select>
+            </div>
+          )}
         </div>
         <button
           onClick={onLogout}

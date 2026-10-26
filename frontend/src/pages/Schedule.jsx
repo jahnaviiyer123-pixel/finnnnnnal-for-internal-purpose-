@@ -34,7 +34,7 @@ export default function Schedule() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // all | mine
   const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
-  const [selectedLocation, setSelectedLocation] = useState(isAdmin ? "" : (user?.location || "Khajaguda"));
+  const [selectedLocation, setSelectedLocation] = useState(isManagerOrAdmin ? "" : (user?.location || "Khajaguda"));
 
   // Monthly Calendar & Holidays state
   const [calYear, setCalYear] = useState(new Date().getFullYear());
@@ -49,7 +49,7 @@ export default function Schedule() {
     date: new Date().toISOString().slice(0, 10),
     title: "",
     type: "holiday",
-    location: isManager ? (user?.location || "") : "",
+    location: "",
     notes: "",
   });
 
@@ -130,7 +130,8 @@ export default function Schedule() {
       const payload = { status };
       if (status === "completed") payload.completed_date = date;
       await api.patch(`/classes/${classId}`, payload);
-      toast.success(`Class ${num} for ${studentName} → ${status}`);
+      const label = status === "completed" ? "Present" : status === "absent" ? "Absent" : status;
+      toast.success(`Class ${num} for ${studentName} marked ${label}`);
       load();
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || e.message);
@@ -238,7 +239,7 @@ export default function Schedule() {
             Schedule & Operations
           </h1>
           <p className="text-sm text-zinc-600 mt-2">
-            12-day working schedules, slot-wise daily ops roster, and functions/holidays calendar.
+            10-day working schedules, slot-wise daily ops roster, and functions/holidays calendar.
           </p>
         </div>
         <div className="flex items-end gap-3 flex-wrap">
@@ -251,7 +252,7 @@ export default function Schedule() {
                 className="border border-zinc-300 px-3 py-2 text-xs font-bold uppercase tracking-wider bg-white outline-none cursor-pointer"
                 data-testid="schedule-branch-filter"
               >
-                {isAdmin && <option value="">All Branches</option>}
+                {isManagerOrAdmin && <option value="">All Branches</option>}
                 {locations.map((loc) => (
                   <option key={loc} value={loc}>{loc} Branch</option>
                 ))}
@@ -342,7 +343,7 @@ export default function Schedule() {
                     </span>
                   </div>
                   <p className="text-xs text-purple-800 mt-1">
-                    {data.holiday.notes || "Official driving school off/function day. Student 12-day working schedules automatically skip this date."}
+                    {data.holiday.notes || "Official driving school off/function day. Student 10-day working schedules automatically skip this date."}
                   </p>
                 </div>
               </div>
@@ -365,7 +366,7 @@ export default function Schedule() {
                     Weekly School Holiday (Sunday)
                   </div>
                   <p className="text-xs text-amber-900 mt-1">
-                    Driving school operations are paused on Sundays. Student 12-day working schedules automatically advance past Sundays.
+                    Driving school operations are paused on Sundays. Student 10-day working schedules automatically advance past Sundays.
                   </p>
                 </div>
               </div>
@@ -733,7 +734,7 @@ export default function Schedule() {
 
             <p className="text-xs text-zinc-600 mb-4 leading-relaxed">
               Declare festival holidays, school functions, fleet inspection, or special off-days.
-              All active student 12-day schedules will automatically skip this date.
+              All active student 10-day schedules will automatically skip this date.
             </p>
 
             <form onSubmit={handleCreateHoliday} className="space-y-4">
@@ -896,17 +897,25 @@ function ScheduleCard({ row, trainerName, onMark }) {
         </span>
         {targetCls && (
           <span className="font-mono-data">
-            · Class {targetCls.class_number}/{row.total_classes || 12} ·{" "}
+            · Class {targetCls.class_number}/{row.total_classes || 10}
+            {row.classes_absent > 0 && (
+              <span className="text-red-600 font-bold ml-1">({row.classes_absent} absent)</span>
+            )}{" "}
+            ·{" "}
             <span
               className={
                 targetCls.status === "completed"
                   ? "text-emerald-700 font-bold"
-                  : targetCls.status === "missed"
+                  : (targetCls.status === "absent" || targetCls.status === "missed")
                   ? "text-red-700 font-bold"
                   : "text-zinc-500"
               }
             >
-              {targetCls.status}
+              {targetCls.status === "completed"
+                ? "✓ Present"
+                : (targetCls.status === "absent" || targetCls.status === "missed")
+                ? "✗ Absent"
+                : targetCls.status}
             </span>
           </span>
         )}
@@ -916,17 +925,17 @@ function ScheduleCard({ row, trainerName, onMark }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => onMark(targetCls.id, "completed", row.name, targetCls.class_number)}
-            data-testid={`mark-attended-${row.id}`}
+            data-testid={`mark-present-${row.id}`}
             className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2"
           >
-            <CheckCircle size={12} weight="bold" /> Attended
+            <CheckCircle size={12} weight="bold" /> Present
           </button>
           <button
-            onClick={() => onMark(targetCls.id, "missed", row.name, targetCls.class_number)}
-            data-testid={`mark-missed-${row.id}`}
+            onClick={() => onMark(targetCls.id, "absent", row.name, targetCls.class_number)}
+            data-testid={`mark-absent-${row.id}`}
             className="flex-1 inline-flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2"
           >
-            <XCircle size={12} weight="bold" /> Missed
+            <XCircle size={12} weight="bold" /> Absent
           </button>
         </div>
       )}

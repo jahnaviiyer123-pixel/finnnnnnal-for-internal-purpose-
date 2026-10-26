@@ -31,8 +31,17 @@ export default function Reports() {
   const isManagerOrAdmin = isAdmin || isManager;
 
   const [period, setPeriod] = useState("weekly"); // "weekly" | "monthly" | "daily"
-  const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
-  const [selectedLocation, setSelectedLocation] = useState(isAdmin ? "" : (user?.location || "Khajaguda"));
+  const [locations, setLocations] = useState(["Khajaguda", "Attapur", "Madhapur"]);
+  const [selectedLocation, setSelectedLocation] = useState("");
+
+  const allLocations = useMemo(() => {
+    const set = new Set(["Khajaguda", "Attapur", "Madhapur"]);
+    locations.forEach((l) => {
+      if (l) set.add(l);
+    });
+    if (user?.location) set.add(user.location);
+    return Array.from(set);
+  }, [locations, user]);
 
   // Weekly date state (Monday to Sunday)
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, -1 = last week, etc.
@@ -139,7 +148,7 @@ export default function Reports() {
   return (
     <div data-testid="reports-page">
       {/* Header */}
-      <div className="flex items-end justify-between mb-6 gap-4 flex-wrap">
+      <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
           <div className="label-tag flex items-center gap-1.5">
             <ChartLine size={13} weight="bold" /> Operations &amp; Performance
@@ -150,32 +159,65 @@ export default function Reports() {
           <p className="text-sm text-zinc-600 mt-2">
             Location-wise branch metrics, completed classes, student progress, and trainer attendance.
           </p>
+
+          {/* Quick Branch Switcher Pills */}
+          <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+            <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mr-1">
+              Branch:
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedLocation("")}
+              className={`px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors border ${
+                selectedLocation === ""
+                  ? "bg-zinc-900 text-white border-zinc-900"
+                  : "bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-100"
+              }`}
+              data-testid="filter-all-branches"
+            >
+              All Branches
+            </button>
+            {allLocations.map((loc) => (
+              <button
+                key={loc}
+                type="button"
+                onClick={() => setSelectedLocation(loc)}
+                className={`px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors border ${
+                  selectedLocation === loc
+                    ? "bg-blue-700 text-white border-blue-700 shadow-sm"
+                    : "bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-100"
+                }`}
+                data-testid={`filter-branch-${loc}`}
+              >
+                📍 {loc}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Filters and Controls */}
         <div className="flex items-end gap-3 flex-wrap">
           {/* Branch Location Dropdown */}
-          <div>
-            <div className="label-tag mb-1 flex items-center gap-1">
+          <div className="flex flex-col">
+            <label htmlFor="report-branch-select" className="label-tag mb-1 flex items-center gap-1 text-[10px]">
               <MapPin size={11} weight="bold" /> Branch Location
-            </div>
-            {isAdmin ? (
+            </label>
+            <div className="flex items-center gap-2 bg-white border border-zinc-300 px-3 py-2 shadow-sm hover:border-zinc-500 transition-colors">
               <select
+                id="report-branch-select"
                 value={selectedLocation}
                 onChange={(e) => setSelectedLocation(e.target.value)}
-                className="border border-zinc-300 px-3 py-2 text-xs font-bold uppercase tracking-wider bg-white outline-none cursor-pointer"
+                className="bg-transparent text-xs font-bold uppercase tracking-wider outline-none cursor-pointer text-zinc-900 pr-3"
                 data-testid="report-branch-filter"
               >
                 <option value="">All Branches</option>
-                {locations.map((loc) => (
-                  <option key={loc} value={loc}>{loc} Branch</option>
+                {allLocations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc} Branch
+                  </option>
                 ))}
               </select>
-            ) : (
-              <div className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold uppercase tracking-wider">
-                <span>📍 {user?.location || "Khajaguda"} Branch</span>
-              </div>
-            )}
+            </div>
           </div>
 
           {isManagerOrAdmin && (
@@ -322,13 +364,13 @@ export default function Reports() {
             <MetricCard
               label="Classes Conducted"
               value={summary.classes_conducted || 0}
-              sub={`${summary.classes_missed || 0} missed`}
+              sub={`${summary.classes_absent ?? summary.classes_missed ?? 0} absentees`}
               color="text-zinc-900"
             />
             <MetricCard
               label="New Enrollments"
               value={summary.new_enrollments || 0}
-              sub="12-day working plan"
+              sub="10-day working plan"
               color="text-blue-700"
             />
             <MetricCard
@@ -635,7 +677,7 @@ export default function Reports() {
             </div>
           )}
 
-          {isAdmin && <NotionSyncCard />}
+          {isManagerOrAdmin && <NotionSyncCard />}
         </div>
       )}
     </div>

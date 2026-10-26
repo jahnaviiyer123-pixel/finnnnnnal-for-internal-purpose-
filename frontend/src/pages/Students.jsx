@@ -15,6 +15,7 @@ import {
   FileXls,
   DownloadSimple,
   FileText,
+  UserMinus,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import PhotoUploader from "@/components/PhotoUploader";
@@ -62,7 +63,7 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
     needs_pickup: false,
     pickup_address: "",
     drop_address: "",
-    total_classes: 12,
+    total_classes: 10,
     assigned_trainer_id: isTrainer ? (user?.id || "") : "",
     fees_total: 0,
     fees_paid: 0,
@@ -70,7 +71,7 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
   });
   const [saving, setSaving] = useState(false);
 
-  const activeLocation = (isTrainer || isManager) ? (user?.location || "Khajaguda") : (form.location || "Khajaguda");
+  const activeLocation = isTrainer ? (user?.location || "Khajaguda") : (form.location || "Khajaguda");
   const locationTrainers = trainers.filter((t) => !t.location || t.location === activeLocation);
 
   const onLocationChange = (newLoc) => {
@@ -88,13 +89,13 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
     if (open) {
       setForm((prev) => ({
         ...prev,
-        location: (isTrainer || isManager) ? (user?.location || "Khajaguda") : prev.location,
+        location: isTrainer ? (user?.location || "Khajaguda") : prev.location,
         assigned_trainer_id: isTrainer ? (user?.id || "") : prev.assigned_trainer_id,
-        total_classes: 12,
+        total_classes: 10,
       }));
       api.get("/slots").then((r) => setSlots(r.data)).catch(() => {});
     }
-  }, [open, user, isTrainer, isManager]);
+  }, [open, user, isTrainer]);
 
   if (!open) return null;
 
@@ -103,7 +104,7 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
     setSaving(true);
     try {
       const payload = { ...form };
-      payload.location = (isTrainer || isManager) ? (user?.location || "Khajaguda") : (form.location || "Khajaguda");
+      payload.location = isTrainer ? (user?.location || "Khajaguda") : (form.location || "Khajaguda");
       if (isTrainer) {
         payload.assigned_trainer_id = user?.id;
       }
@@ -118,11 +119,11 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
       else payload.age = Number(payload.age);
       if (!payload.pickup_address) delete payload.pickup_address;
       if (!payload.drop_address) delete payload.drop_address;
-      payload.total_classes = Number(payload.total_classes) || 12;
+      payload.total_classes = Number(payload.total_classes) || 10;
       payload.fees_total = isAdmin ? (Number(payload.fees_total) || 0) : 0;
       payload.fees_paid = isAdmin ? (Number(payload.fees_paid) || 0) : 0;
       const { data } = await api.post("/students", payload);
-      toast.success("Student enrolled with 12 working days schedule");
+      toast.success("Student enrolled with 10 working days schedule");
       onCreated(data);
       onClose();
     } catch (e) {
@@ -175,9 +176,9 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
             </select>
           </Field>
           <Field label="Branch Location *">
-            {isTrainer || isManager ? (
+            {isTrainer ? (
               <div className="p-2 bg-zinc-100 border border-zinc-300 text-xs font-bold text-zinc-700 uppercase">
-                📍 {user?.location || "Khajaguda"} Branch ({isTrainer ? "Trainer" : "Manager"} assigned)
+                📍 {user?.location || "Khajaguda"} Branch (Trainer assigned)
               </div>
             ) : (
               <select value={form.location} onChange={(e) => onLocationChange(e.target.value)} className={inputCls} data-testid="student-location-select">
@@ -196,7 +197,7 @@ function EnrollDialog({ open, onClose, trainers, onCreated }) {
               {slots.map((s) => <option key={s.id} value={s.label}>{formatSlot12(s.label)}</option>)}
             </select>
           </Field>
-          <Field label="Course Days (12 Working Days)">
+          <Field label="Course Days (10 Working Days)">
             <input type="number" min="1" max="30" value={form.total_classes} onChange={upd("total_classes")} className={inputCls} />
           </Field>
           <Field label={`Assigned Trainer (${activeLocation})`}>
@@ -305,7 +306,7 @@ const Field = ({ label, children }) => (
 /* ────────────────────────────────────────────
    Student Table — Reused for both tabs
    ──────────────────────────────────────────── */
-function StudentTable({ students, loading, onEnroll, onReload, isAdmin, onViewInvoice }) {
+function StudentTable({ students, loading, onEnroll, onReload, isAdmin, isManagerOrAdmin, onViewInvoice }) {
   if (loading) {
     return <div className="p-10 text-center label-tag animate-pulse">Loading…</div>;
   }
@@ -339,7 +340,7 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin, onViewIn
       <tbody>
         {students.map((s) => {
           const pending = (s.fees_total || 0) - (s.fees_paid || 0);
-          const totalC = s.total_classes || 12;
+          const totalC = s.total_classes || 10;
           const completedC = s.classes_completed || 0;
           const remC = s.classes_remaining != null ? s.classes_remaining : Math.max(0, totalC - completedC);
           const isEndingSoon = s.status === "active" && (s.is_ending_soon || (remC > 0 && remC <= 3));
@@ -408,6 +409,11 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin, onViewIn
                     />
                   </span>
                 </div>
+                {s.classes_absent > 0 && (
+                  <div className="text-[10px] text-red-600 font-bold tracking-tight mt-0.5">
+                    {s.classes_absent} absentee{s.classes_absent > 1 ? "s" : ""}
+                  </div>
+                )}
               </td>
               {isAdmin && (
                 <td className="p-3 text-right font-mono-data text-xs">
@@ -440,7 +446,7 @@ function StudentTable({ students, loading, onEnroll, onReload, isAdmin, onViewIn
                   >
                     <FileText size={13} weight="bold" />
                   </button>
-                  {isAdmin && (
+                  {isManagerOrAdmin && (
                     <button
                       onClick={async (e) => {
                         e.preventDefault();
@@ -484,7 +490,7 @@ export default function Students() {
   const [oldLoaded, setOldLoaded] = useState(false);
   const [trainers, setTrainers] = useState([]);
   const [locations, setLocations] = useState(["Attapur", "Khajaguda", "Madhapur"]);
-  const [selectedLocation, setSelectedLocation] = useState(isAdmin ? "" : (user?.location || "Khajaguda"));
+  const [selectedLocation, setSelectedLocation] = useState(isManagerOrAdmin ? "" : (user?.location || "Khajaguda"));
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -549,13 +555,20 @@ export default function Students() {
     }
   };
 
-  const currentList = tab === "active" ? activeStudents : oldStudents;
+  const currentList =
+    tab === "absentees"
+      ? activeStudents.filter((s) => (s.classes_absent || 0) > 0)
+      : tab === "active"
+      ? activeStudents
+      : oldStudents;
 
   const filtered = currentList.filter(
     (s) =>
       s.name.toLowerCase().includes(query.toLowerCase()) ||
       s.phone.includes(query)
   );
+
+  const absenteesCount = activeStudents.filter((s) => (s.classes_absent || 0) > 0).length;
 
   return (
     <div data-testid="students-page">
@@ -576,7 +589,7 @@ export default function Students() {
                 className="bg-transparent text-xs font-bold uppercase tracking-wider outline-none cursor-pointer"
                 data-testid="student-branch-filter"
               >
-                {isAdmin && <option value="">All Branches</option>}
+                {isManagerOrAdmin && <option value="">All Branches</option>}
                 {locations.map((loc) => (
                   <option key={loc} value={loc}>{loc} Branch</option>
                 ))}
@@ -598,7 +611,7 @@ export default function Students() {
         </div>
       </div>
 
-      {/* Tabs: Active / Old Students */}
+      {/* Tabs: Active / Absentees / Old Students */}
       <div className="flex items-center gap-1 mb-6 border-b border-zinc-200" data-testid="student-tabs">
         <button
           onClick={() => setTab("active")}
@@ -611,6 +624,20 @@ export default function Students() {
         >
           <Users size={14} weight="bold" /> Active Students
           <span className="font-mono-data ml-1">({activeStudents.length})</span>
+        </button>
+        <button
+          onClick={() => setTab("absentees")}
+          data-testid="tab-absentees-students"
+          className={`inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-colors ${
+            tab === "absentees"
+              ? "border-red-600 text-red-700 font-bold"
+              : "border-transparent text-zinc-500 hover:text-zinc-900"
+          }`}
+        >
+          <UserMinus size={14} weight="bold" className={tab === "absentees" ? "text-red-600" : "text-zinc-500"} /> Absentees
+          <span className="font-mono-data ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-100 text-red-800 rounded">
+            ({absenteesCount})
+          </span>
         </button>
         <button
           onClick={() => setTab("old")}
@@ -703,6 +730,7 @@ export default function Students() {
             }
           }}
           isAdmin={isAdmin}
+          isManagerOrAdmin={isManagerOrAdmin}
           onViewInvoice={(sid) => setInvoiceStudentId(sid)}
         />
       </div>

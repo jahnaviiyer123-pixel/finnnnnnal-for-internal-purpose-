@@ -37,8 +37,18 @@ export function AuthProvider({ children }) {
     setUser(false);
   };
 
+  const updateLocation = async (newLocation) => {
+    try {
+      const { data } = await api.patch("/auth/location", { location: newLocation });
+      setUser(data);
+      return { ok: true, user: data };
+    } catch (e) {
+      return { ok: false, error: formatApiError(e.response?.data?.detail) || e.message };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, setUser, ready, login, logout }}>
+    <AuthContext.Provider value={{ user, setUser, ready, login, logout, updateLocation }}>
       {children}
     </AuthContext.Provider>
   );

@@ -163,6 +163,8 @@ async def get_current_user(request: Request) -> dict:
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
     if not token:
+        token = request.query_params.get("auth") or request.query_params.get("token")
+    if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
@@ -225,6 +227,10 @@ class ManagerUpdate(BaseModel):
     password: Optional[str] = None
 
 
+class UserLocationUpdate(BaseModel):
+    location: str
+
+
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
@@ -274,7 +280,7 @@ class StudentCreate(BaseModel):
     needs_pickup: bool = False
     pickup_address: Optional[str] = None
     drop_address: Optional[str] = None
-    total_classes: int = 12
+    total_classes: int = 10
     assigned_trainer_id: Optional[str] = None
     pickup_trainer_id: Optional[str] = None
     drop_trainer_id: Optional[str] = None
@@ -318,7 +324,7 @@ class ClassUpdate(BaseModel):
     scheduled_date: Optional[str] = None
     completed_date: Optional[str] = None
     trainer_id: Optional[str] = None
-    status: Optional[Literal["pending", "completed", "missed"]] = None
+    status: Optional[Literal["pending", "completed", "missed", "absent"]] = None
     notes: Optional[str] = None
 
 
@@ -383,26 +389,6 @@ async def seed_admin():
         if updates:
             await db.users.update_one({"email": admin_email}, {"$set": updates})
 
-    # Seed demo trainer
-    trainer_email = "trainer@ridewell.com"
-    existing_trainer = await db.users.find_one({"email": trainer_email})
-    if not existing_trainer:
-        await db.users.insert_one({
-            "id": str(uuid.uuid4()),
-            "email": trainer_email,
-            "password_hash": hash_password("trainer123"),
-            "name": "Ravi Kumar",
-            "role": "trainer",
-            "status": "active",
-            "location": "Khajaguda",
-            "phone": "+91 98765 43210",
-            "photo_url": None,
-            "created_at": _now_iso(),
-        })
-        logger.info("Seeded demo trainer")
-    else:
-        if not existing_trainer.get("location"):
-            await db.users.update_one({"email": trainer_email}, {"$set": {"location": "Khajaguda"}})
 
     # Seed demo manager (subadmin)
     manager_email = os.environ.get("MANAGER_EMAIL", "manager@ridewell.com").lower()
@@ -606,6 +592,19 @@ async def me(user: dict = Depends(get_current_user)):
     return user
 
 
+@api.patch("/auth/location")
+async def update_my_location(body: UserLocationUpdate, user: dict = Depends(get_current_user)):
+    """Allow managers and admins to change/switch their active branch location."""
+    if user.get("role") not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Only managers and admins can change branch location")
+    loc = body.location.strip()
+    if not loc:
+        raise HTTPException(status_code=400, detail="Location cannot be empty")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"location": loc}})
+    _user_cache.pop(user["id"], None)
+    return await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+
+
 @api.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
@@ -638,8 +637,6 @@ async def list_trainers(
             q["location"] = trainer_loc
     elif location:
         q["location"] = location
-    elif user.get("role") == "manager" and user.get("location"):
-        q["location"] = user["location"]
 
     trainers = await db.users.find(q, {"_id": 0, "password_hash": 0}).to_list(500)
     _trainers_cache[cache_key] = {"time": now, "data": trainers}
@@ -651,7 +648,7 @@ async def create_trainer(body: TrainerCreate, user: dict = Depends(require_manag
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already exists")
-    loc = body.location or (user.get("location") if user.get("role") == "manager" else "Khajaguda")
+    loc = body.location or user.get("location") or "Khajaguda"
     doc = {
         "id": str(uuid.uuid4()),
         "email": email,
@@ -739,7 +736,7 @@ async def update_trainer(trainer_id: str, body: TrainerUpdate, user: dict = Depe
 
 
 @api.delete("/trainers/{trainer_id}")
-async def delete_trainer(trainer_id: str, user: dict = Depends(require_admin)):
+async def delete_trainer(trainer_id: str, user: dict = Depends(require_manager_or_admin)):
     res = await db.users.delete_one({"id": trainer_id, "role": "trainer"})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Trainer not found")
@@ -875,7 +872,7 @@ async def _create_class_slots(
     joining_date: Optional[str] = None,
     location: Optional[str] = None,
 ):
-    total_classes = total or 12
+    total_classes = total or 10
     h_query = {"$or": [{"location": None}, {"location": ""}]}
     if location:
         h_query = {"$or": [{"location": None}, {"location": ""}, {"location": location}]}
@@ -940,8 +937,6 @@ async def list_students(
             q["assigned_trainer_id"] = user["id"]
     elif location:
         q["location"] = location
-    elif user.get("role") == "manager" and user.get("location"):
-        q["location"] = user["location"]
 
     cursor = coll.find(q, {"_id": 0}).sort("joining_date", -1)
     if limit:
@@ -953,22 +948,34 @@ async def list_students(
 
     is_admin = user.get("role") == "admin"
 
-    # Batch-aggregate completed classes for all students in 1 single query instead of N separate calls
+    # Batch-aggregate completed and absent classes for all students in 1 single query instead of N separate calls
     student_ids = [s["id"] for s in students if "id" in s]
-    counts = {}
+    completed_counts = {}
+    absent_counts = {}
     if include_classes:
         class_coll = db.archived_classes if status == "old" else db.classes
         pipeline = [
-            {"$match": {"student_id": {"$in": student_ids}, "status": "completed"}},
-            {"$group": {"_id": "$student_id", "completed_count": {"$sum": 1}}},
+            {"$match": {"student_id": {"$in": student_ids}, "status": {"$in": ["completed", "absent", "missed"]}}},
+            {"$group": {
+                "_id": {"student_id": "$student_id", "status": "$status"},
+                "count": {"$sum": 1}
+            }},
         ]
-        counts = {doc["_id"]: doc["completed_count"] async for doc in class_coll.aggregate(pipeline)}
+        async for doc in class_coll.aggregate(pipeline):
+            sid = doc["_id"]["student_id"]
+            st = doc["_id"]["status"]
+            if st == "completed":
+                completed_counts[sid] = completed_counts.get(sid, 0) + doc["count"]
+            else:
+                absent_counts[sid] = absent_counts.get(sid, 0) + doc["count"]
 
     for s in students:
-        completed = counts.get(s.get("id"), 0)
-        total_c = s.get("total_classes", 12) or 12
+        completed = completed_counts.get(s.get("id"), 0)
+        absent = absent_counts.get(s.get("id"), 0)
+        total_c = s.get("total_classes", 10) or 10
         rem = max(0, total_c - completed)
         s["classes_completed"] = completed
+        s["classes_absent"] = absent
         s["classes_remaining"] = rem
         # Last 3 working days condition: 1 to 3 classes remaining out of course
         s["is_ending_soon"] = (0 < rem <= 3 and s.get("status") == "active")
@@ -987,7 +994,7 @@ async def create_student(body: StudentCreate, user: dict = Depends(get_current_u
     is_trainer = user.get("role") == "trainer"
     loc = (user.get("location") or "Khajaguda") if is_trainer else (body.location or "Khajaguda")
     assigned_trainer = (user["id"] if is_trainer and not body.assigned_trainer_id else body.assigned_trainer_id)
-    total_classes = body.total_classes or 12
+    total_classes = body.total_classes or 10
 
     doc = {
         "id": sid,
@@ -1086,7 +1093,7 @@ async def get_student(student_id: str, user: dict = Depends(get_current_user)):
 async def get_student_invoice(student_id: str, user: dict = Depends(get_current_user)):
     """
     Returns official admission receipt & training agreement invoice for a student,
-    including allotted trainer, allocated hourly slot, 12 working days training calendar,
+    including allotted trainer, allocated hourly slot, 10 working days training calendar,
     fees/payments breakdown, and mandatory training rules.
     """
     s = await db.students.find_one({"id": student_id}, {"_id": 0})
@@ -1100,9 +1107,6 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
         trainer_loc = user.get("location")
         if trainer_loc and s.get("location") and s.get("location") != trainer_loc and s.get("assigned_trainer_id") != user["id"]:
             raise HTTPException(status_code=403, detail="Access denied to student outside your location")
-    elif user.get("role") == "manager" and user.get("location"):
-        if s.get("location") and s.get("location") != user["location"]:
-            raise HTTPException(status_code=403, detail="Access denied to student outside your branch")
 
     # Fetch allotted trainer, pickup trainer, drop trainer
     trainer_ids = [tid for tid in [s.get("assigned_trainer_id"), s.get("pickup_trainer_id"), s.get("drop_trainer_id")] if tid]
@@ -1113,7 +1117,7 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
     pickup_trainer = trainer_map.get(s.get("pickup_trainer_id"))
     drop_trainer = trainer_map.get(s.get("drop_trainer_id"))
 
-    # Fetch 12 working days class slots
+    # Fetch 10 working days class slots
     classes = await db.classes.find({"student_id": student_id}, {"_id": 0}).sort("class_number", 1).to_list(100)
     if not classes:
         classes = await db.archived_classes.find({"student_id": student_id}, {"_id": 0}).sort("class_number", 1).to_list(100)
@@ -1140,10 +1144,10 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
 
     instructions = [
         f"MANDATORY REPORTING TIME: You must report at the branch / pickup point precisely at your allotted time slot ({s.get('slot_time') or 'assigned hour'}). Training vehicles depart strictly on schedule; late arrivals will not receive extra time.",
-        "12 WORKING DAYS COURSE: Training is strictly scheduled for 12 consecutive working days (skipping Sundays and officially declared school holidays/functions). Check your schedule card below for exact class dates.",
+        "10 WORKING DAYS COURSE: Training is strictly scheduled for 10 consecutive working days (skipping Sundays and officially declared school holidays/functions). Check your schedule card below for exact class dates.",
         "LEARNER LICENSE (LLR) MANDATORY: You must carry your valid Learner's License (physical copy or official mParivahan digital copy) during every single driving session. Driving without an LLR is strictly prohibited by law.",
         "SAFETY & ATTIRE: Wear comfortable, flat footwear (sneakers or closed shoes). High heels, loose sandals, or barefoot driving are strictly prohibited. Seatbelt / helmet must be fastened before turning on ignition.",
-        "ABSENCE & RESCHEDULING NOTICE: If an unavoidable emergency arises, you must notify your allotted trainer or branch manager at least 12 hours in advance. Unnotified absences will be marked as 'Missed' and cannot be compensated.",
+        "ABSENCE & RESCHEDULING NOTICE: If an unavoidable emergency arises, you must notify your allotted trainer or branch manager in advance. Absences are recorded as 'Absent' in the official course ledger, and compensatory classes are arranged to ensure complete 10-day training.",
         f"BALANCE FEES: Any outstanding course balance (₹{int(fees_balance):,}) must be cleared on or before the 6th training session.",
         f"ALLOTTED TRAINER CONTACT: Your primary driving instructor is {assigned_trainer.get('name') if assigned_trainer else 'Assigned Instructor'} ({assigned_trainer.get('phone') if assigned_trainer else 'Branch Reception'}). Call directly for day-of pickup or vehicle coordination.",
     ]
@@ -1294,7 +1298,7 @@ async def update_student(student_id: str, body: StudentUpdate, user: dict = Depe
 
 
 @api.delete("/students/{student_id}")
-async def delete_student(student_id: str, user: dict = Depends(require_admin)):
+async def delete_student(student_id: str, user: dict = Depends(require_manager_or_admin)):
     await db.students.delete_one({"id": student_id})
     await db.archived_students.delete_one({"id": student_id})
     await db.classes.delete_many({"student_id": student_id})
@@ -1314,8 +1318,6 @@ async def list_active_classes(location: Optional[str] = None, user: dict = Depen
             q["location"] = user["location"]
     elif location:
         q["location"] = location
-    elif user.get("role") == "manager" and user.get("location"):
-        q["location"] = user["location"]
 
     active_students = await db.students.find(q, {"id": 1, "_id": 0}).to_list(1000)
     student_ids = [s["id"] for s in active_students if "id" in s]
@@ -1339,7 +1341,7 @@ async def list_classes(student_id: str, user: dict = Depends(get_current_user)):
 
 
 @api.delete("/classes/{class_id}")
-async def delete_class(class_id: str, user: dict = Depends(require_admin)):
+async def delete_class(class_id: str, user: dict = Depends(require_manager_or_admin)):
     await db.classes.delete_one({"id": class_id})
     await db.archived_classes.delete_one({"id": class_id})
     invalidate_stats()
@@ -1348,27 +1350,101 @@ async def delete_class(class_id: str, user: dict = Depends(require_admin)):
 
 @api.patch("/classes/{class_id}")
 async def update_class(class_id: str, body: ClassUpdate, user: dict = Depends(get_current_user)):
+    existing = await db.classes.find_one({"id": class_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Class not found")
+    prev_status = existing.get("status")
+
     updates = {k: v for k, v in body.model_dump(exclude_none=True).items()}
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Normalize missed -> absent
+    if updates.get("status") == "missed":
+        updates["status"] = "absent"
+
+    # If marked absent, ensure completed_date is cleared
+    if updates.get("status") == "absent" and "completed_date" not in updates:
+        updates["completed_date"] = None
+
     updates["updated_at"] = _now_iso()
-    res = await db.classes.update_one({"id": class_id}, {"$set": updates})
-    if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Class not found")
+    await db.classes.update_one({"id": class_id}, {"$set": updates})
     updated_class = await db.classes.find_one({"id": class_id}, {"_id": 0})
     invalidate_stats()
 
-    # Auto-complete student when ALL their classes are done
-    if updated_class and updates.get("status") == "completed":
-        student_id = updated_class["student_id"]
-        total = await db.classes.count_documents({"student_id": student_id})
-        completed = await db.classes.count_documents({"student_id": student_id, "status": "completed"})
-        if total > 0 and completed >= total:
-            await db.students.update_one(
-                {"id": student_id, "status": "active"},
-                {"$set": {"status": "completed", "completed_at": _now_iso()}},
-            )
-            logger.info("Auto-completed student %s (all %d classes done)", student_id, total)
+    new_status = updates.get("status")
+    student_id = existing["student_id"]
+
+    # 1. When marked Absent: Ensure student completes required course by adding compensatory class
+    if updated_class and new_status == "absent":
+        student = await db.students.find_one({"id": student_id})
+        if student:
+            target_total = student.get("total_classes", 10) or 10
+            active_or_pending = await db.classes.count_documents({
+                "student_id": student_id,
+                "status": {"$in": ["completed", "pending"]},
+            })
+            if active_or_pending < target_total:
+                deficit = target_total - active_or_pending
+                latest_class = await db.classes.find({"student_id": student_id}).sort("scheduled_date", -1).to_list(1)
+                start_date_str = latest_class[0].get("scheduled_date") if (latest_class and latest_class[0].get("scheduled_date")) else datetime.now(timezone.utc).date().isoformat()
+                try:
+                    last_dt = datetime.date.fromisoformat(start_date_str)
+                except Exception:
+                    last_dt = datetime.now(timezone.utc).date()
+
+                highest_class_num = await db.classes.find({"student_id": student_id}).sort("class_number", -1).to_list(1)
+                curr_max_num = highest_class_num[0].get("class_number", target_total) if highest_class_num else target_total
+
+                for _ in range(deficit):
+                    last_dt = last_dt + datetime.timedelta(days=1)
+                    while last_dt.weekday() == 6:  # Skip Sunday
+                        last_dt += datetime.timedelta(days=1)
+                    curr_max_num += 1
+                    makeup_doc = {
+                        "id": str(uuid.uuid4()),
+                        "student_id": student_id,
+                        "trainer_id": existing.get("trainer_id") or student.get("assigned_trainer_id"),
+                        "class_number": curr_max_num,
+                        "scheduled_date": last_dt.isoformat(),
+                        "status": "pending",
+                        "slot_time": existing.get("slot_time") or student.get("slot_time"),
+                        "notes": f"Compensatory class for absent Class {existing.get('class_number')}",
+                        "is_makeup": True,
+                        "makeup_for_class_id": class_id,
+                        "created_at": _now_iso(),
+                        "updated_at": _now_iso(),
+                    }
+                    await db.classes.insert_one(makeup_doc)
+                    logger.info("Added compensatory class %d on %s for student %s (absent in class %s)",
+                                curr_max_num, last_dt.isoformat(), student_id, existing.get("class_number"))
+
+    elif updated_class and prev_status in ("absent", "missed") and new_status in ("completed", "pending"):
+        # If reverted from absent to completed or pending, clean up any pending makeup class created for it
+        await db.classes.delete_one({
+            "student_id": student_id,
+            "makeup_for_class_id": class_id,
+            "status": "pending",
+        })
+
+    # 2. Check student course completion against their full required course quota
+    if updated_class:
+        student = await db.students.find_one({"id": student_id})
+        if student:
+            target_total = student.get("total_classes", 10) or 10
+            completed = await db.classes.count_documents({"student_id": student_id, "status": "completed"})
+            pending = await db.classes.count_documents({"student_id": student_id, "status": "pending"})
+            if completed >= target_total and pending == 0:
+                await db.students.update_one(
+                    {"id": student_id, "status": "active"},
+                    {"$set": {"status": "completed", "completed_at": _now_iso()}},
+                )
+                logger.info("Auto-completed student %s (all %d required classes completed)", student_id, completed)
+            elif student.get("status") == "completed" and completed < target_total:
+                await db.students.update_one(
+                    {"id": student_id},
+                    {"$set": {"status": "active", "completed_at": None}},
+                )
 
     return updated_class
 
@@ -1568,7 +1644,7 @@ async def list_slots(user: dict = Depends(get_current_user)):
 
 
 @api.post("/slots")
-async def create_slot(body: SlotCreate, user: dict = Depends(require_admin)):
+async def create_slot(body: SlotCreate, user: dict = Depends(require_manager_or_admin)):
     if await db.slots.find_one({"label": body.label}):
         raise HTTPException(status_code=400, detail="Slot label already exists")
     doc = {
@@ -1585,7 +1661,7 @@ async def create_slot(body: SlotCreate, user: dict = Depends(require_admin)):
 
 
 @api.delete("/slots/{slot_id}")
-async def delete_slot(slot_id: str, user: dict = Depends(require_admin)):
+async def delete_slot(slot_id: str, user: dict = Depends(require_manager_or_admin)):
     res = await db.slots.delete_one({"id": slot_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Slot not found")
@@ -1608,8 +1684,6 @@ async def schedule_today(
         target_location = user.get("location")
     elif location:
         target_location = location
-    elif user.get("role") == "manager" and user.get("location"):
-        target_location = user["location"]
 
     student_q = {"status": "active"}
     trainer_q = {"role": "trainer"}
@@ -1657,17 +1731,29 @@ async def schedule_today(
         {"_id": 0, "id": 1, "student_id": 1, "class_number": 1, "status": 1, "scheduled_date": 1},
     ).sort("class_number", 1).to_list(1000)
 
-    # Bulk query 3: Completed classes counts for active students to identify last 3 days
-    completed_counts_task = db.classes.aggregate([
-        {"$match": {"student_id": {"$in": student_ids}, "status": "completed"}},
-        {"$group": {"_id": "$student_id", "completed_count": {"$sum": 1}}},
+    # Bulk query 3: Completed & Absent classes counts for active students
+    status_counts_task = db.classes.aggregate([
+        {"$match": {"student_id": {"$in": student_ids}, "status": {"$in": ["completed", "absent", "missed"]}}},
+        {"$group": {
+            "_id": {"student_id": "$student_id", "status": "$status"},
+            "count": {"$sum": 1}
+        }},
     ]).to_list(1000)
 
-    today_classes_list, pending_classes_list, completed_agg = await asyncio.gather(
-        today_classes_task, pending_classes_task, completed_counts_task
+    today_classes_list, pending_classes_list, status_agg = await asyncio.gather(
+        today_classes_task, pending_classes_task, status_counts_task
     )
 
-    completed_map = {doc["_id"]: doc["completed_count"] for doc in completed_agg}
+    completed_map = {}
+    absent_map = {}
+    for doc in status_agg:
+        sid = doc["_id"]["student_id"]
+        st = doc["_id"]["status"]
+        if st == "completed":
+            completed_map[sid] = completed_map.get(sid, 0) + doc["count"]
+        else:
+            absent_map[sid] = absent_map.get(sid, 0) + doc["count"]
+
     today_map = {c["student_id"]: c for c in today_classes_list}
     next_map = {}
     for c in pending_classes_list:
@@ -1680,7 +1766,8 @@ async def schedule_today(
         next_class = next_map.get(sid)
         today_class = today_map.get(sid)
         completed = completed_map.get(sid, 0)
-        total_c = s.get("total_classes", 12) or 12
+        absent = absent_map.get(sid, 0)
+        total_c = s.get("total_classes", 10) or 10
         rem = max(0, total_c - completed)
         student_row = {
             "id": sid,
@@ -1695,6 +1782,7 @@ async def schedule_today(
             "pickup_trainer_id": s.get("pickup_trainer_id"),
             "drop_trainer_id": s.get("drop_trainer_id"),
             "classes_completed": completed,
+            "classes_absent": absent,
             "total_classes": total_c,
             "classes_remaining": rem,
             "is_ending_soon": (0 < rem <= 3),
@@ -1816,12 +1904,6 @@ async def create_holiday(
         raise HTTPException(status_code=400, detail="Invalid date format, expected YYYY-MM-DD")
 
     # Manager can only declare holidays for their branch
-    if user.get("role") == "manager" and user.get("location"):
-        if body.location and body.location != user["location"]:
-            raise HTTPException(status_code=403, detail="Manager can only declare holidays for their own location")
-        if not body.location:
-            body.location = user["location"]
-
     existing = await db.holidays.find_one({"date": body.date, "location": body.location})
     if existing:
         raise HTTPException(status_code=400, detail="Holiday or function already declared for this date and location")
@@ -1853,9 +1935,6 @@ async def delete_holiday(
     existing = await db.holidays.find_one({"id": holiday_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Holiday not found")
-    if user.get("role") == "manager" and user.get("location"):
-        if existing.get("location") and existing.get("location") != user["location"]:
-            raise HTTPException(status_code=403, detail="Manager can only delete holidays for their own location")
     await db.holidays.delete_one({"id": holiday_id})
     return {"ok": True}
 
@@ -1880,8 +1959,6 @@ async def dashboard_stats(location: Optional[str] = None, user: dict = Depends(g
         target_location = user.get("location")
     elif location:
         target_location = location
-    elif user.get("role") == "manager" and user.get("location"):
-        target_location = user["location"]
 
     cache_key = f"{target_location}_{user.get('role')}"
     now = time.time()
@@ -1956,7 +2033,7 @@ async def dashboard_stats(location: Optional[str] = None, user: dict = Depends(g
     ending_soon_students = []
     for s in active_students_list:
         completed = completed_counts.get(s["id"], 0)
-        total_c = s.get("total_classes", 12) or 12
+        total_c = s.get("total_classes", 10) or 10
         rem = max(0, total_c - completed)
         if 0 < rem <= 3:
             ending_soon_students.append({
@@ -2041,18 +2118,33 @@ async def reports_summary(
 
     # Determine target location filter
     target_location = None
-    if user.get("role") == "manager" and user.get("location"):
-        target_location = user["location"]
-    elif location:
-        target_location = location
+    if location and location.strip():
+        target_location = location.strip()
 
-    # 1. Fetch Students
+    # 1. Fetch Students (branch filtered + all students for name resolution)
     sq = {}
     if target_location:
         sq["location"] = target_location
-    students = await db.students.find(sq, {"_id": 0}).to_list(2000)
+    students_task = db.students.find(sq, {"_id": 0}).to_list(2000)
+    all_students_task = db.students.find({}, {"_id": 0, "id": 1, "name": 1, "location": 1, "slot_time": 1}).to_list(3000)
+
+    # 2. Fetch Trainers (branch filtered + all trainers for name resolution)
+    tq = {"role": "trainer"}
+    if target_location:
+        tq["location"] = target_location
+    trainers_task = db.users.find(tq, {"_id": 0, "password_hash": 0}).to_list(500)
+    all_trainers_task = db.users.find({"role": "trainer"}, {"_id": 0, "id": 1, "name": 1, "location": 1}).to_list(500)
+
+    students, all_students, trainers, all_trainers = await asyncio.gather(
+        students_task, all_students_task, trainers_task, all_trainers_task
+    )
+
     student_map = {s["id"]: s for s in students}
     student_ids = set(student_map.keys())
+    all_student_map = {s["id"]: s for s in all_students}
+    all_trainer_map = {t["id"]: t for t in all_trainers}
+    trainer_map = {t["id"]: t for t in trainers}
+    trainer_ids = set(trainer_map.keys())
 
     new_students = [
         s for s in students
@@ -2063,39 +2155,50 @@ async def reports_summary(
     completed_count = sum(1 for s in students if s.get("status") == "completed")
     dropped_count = sum(1 for s in students if s.get("status") == "dropped")
 
-    # 2. Fetch Trainers
-    tq = {"role": "trainer"}
-    if target_location:
-        tq["location"] = target_location
-    trainers = await db.users.find(tq, {"_id": 0, "password_hash": 0}).to_list(500)
-    trainer_map = {t["id"]: t for t in trainers}
-    trainer_ids = set(trainer_map.keys())
-
-    # 3. Fetch Classes
+    # 3. Fetch Classes & Attendance concurrently
     cq = {
         "completed_date": {"$gte": s_date, "$lte": e_date},
         "status": "completed",
     }
     if target_location:
-        cq["$or"] = [
-            {"student_id": {"$in": list(student_ids)}},
-            {"trainer_id": {"$in": list(trainer_ids)}},
-        ]
-    completed_classes = await db.classes.find(cq, {"_id": 0}).sort("completed_date", -1).to_list(2000)
+        cq["student_id"] = {"$in": list(student_ids)}
+    completed_classes_task = db.classes.find(cq, {"_id": 0}).sort("completed_date", -1).to_list(2000)
 
     mq = {
-        "status": "missed",
+        "status": {"$in": ["absent", "missed"]},
         "scheduled_date": {"$gte": s_date, "$lte": e_date},
     }
     if target_location:
         mq["student_id"] = {"$in": list(student_ids)}
-    missed_classes = await db.classes.find(mq, {"_id": 0}).to_list(1000)
+    missed_classes_task = db.classes.find(mq, {"_id": 0}).to_list(1000)
 
-    # 4. Fetch Attendance
     aq = {"date": {"$gte": s_date, "$lte": e_date}}
     if target_location:
         aq["trainer_id"] = {"$in": list(trainer_ids)}
-    attendance_records = await db.attendance.find(aq, {"_id": 0}).to_list(2000)
+    attendance_records_task = db.attendance.find(aq, {"_id": 0}).to_list(2000)
+
+    # 5. Financial Metrics (Admin Only)
+    pq_task = None
+    if is_admin:
+        pq = {"date": {"$gte": s_date, "$lte": e_date}}
+        if target_location:
+            pq["student_id"] = {"$in": list(student_ids)}
+        pq_task = db.payments.find(pq, {"_id": 0}).sort("date", -1).to_list(2000)
+
+    completed_classes, missed_classes, attendance_records = await asyncio.gather(
+        completed_classes_task, missed_classes_task, attendance_records_task
+    )
+
+    total_fees_collected = 0
+    payment_methods_summary = {}
+    recent_payments = []
+    if is_admin and pq_task:
+        payments = await pq_task
+        total_fees_collected = sum(p.get("amount", 0) for p in payments)
+        for p in payments:
+            m = p.get("method", "cash")
+            payment_methods_summary[m] = payment_methods_summary.get(m, 0) + p.get("amount", 0)
+        recent_payments = payments[:100]
 
     trainer_stats = []
     for t in trainers:
@@ -2123,21 +2226,6 @@ async def reports_summary(
             "attendance_rate": att_rate,
         })
     trainer_stats.sort(key=lambda x: (x["new_students_month"], x["students_assigned"], x["classes_conducted"]), reverse=True)
-
-    # 5. Financial Metrics (Admin Only)
-    total_fees_collected = 0
-    payment_methods_summary = {}
-    recent_payments = []
-    if is_admin:
-        pq = {"date": {"$gte": s_date, "$lte": e_date}}
-        if target_location:
-            pq["student_id"] = {"$in": list(student_ids)}
-        payments = await db.payments.find(pq, {"_id": 0}).sort("date", -1).to_list(2000)
-        total_fees_collected = sum(p.get("amount", 0) for p in payments)
-        for p in payments:
-            m = p.get("method", "cash")
-            payment_methods_summary[m] = payment_methods_summary.get(m, 0) + p.get("amount", 0)
-        recent_payments = payments[:100]
 
     # 6. Daily progression
     daily_breakdown = {}
@@ -2176,6 +2264,7 @@ async def reports_summary(
         "location": target_location,
         "summary": {
             "classes_conducted": len(completed_classes),
+            "classes_absent": len(missed_classes),
             "classes_missed": len(missed_classes),
             "new_enrollments": len(new_students),
             "active_students": active_count,
@@ -2194,7 +2283,7 @@ async def reports_summary(
                 "phone": s.get("phone"),
                 "location": s.get("location"),
                 "joining_date": s.get("joining_date"),
-                "assigned_trainer_name": trainer_map.get(s.get("assigned_trainer_id"), {}).get("name", "—"),
+                "assigned_trainer_name": all_trainer_map.get(s.get("assigned_trainer_id"), {}).get("name") or trainer_map.get(s.get("assigned_trainer_id"), {}).get("name", "—"),
                 "slot_time": s.get("slot_time"),
             }
             for s in new_students
@@ -2205,11 +2294,11 @@ async def reports_summary(
                 "class_number": c.get("class_number"),
                 "completed_date": c.get("completed_date"),
                 "student_id": c.get("student_id"),
-                "student_name": student_map.get(c.get("student_id"), {}).get("name", "—"),
+                "student_name": all_student_map.get(c.get("student_id"), {}).get("name") or student_map.get(c.get("student_id"), {}).get("name", "—"),
                 "trainer_id": c.get("trainer_id"),
-                "trainer_name": trainer_map.get(c.get("trainer_id"), {}).get("name", "—"),
-                "slot_time": student_map.get(c.get("student_id"), {}).get("slot_time"),
-                "location": student_map.get(c.get("student_id"), {}).get("location"),
+                "trainer_name": all_trainer_map.get(c.get("trainer_id"), {}).get("name") or trainer_map.get(c.get("trainer_id"), {}).get("name", "—"),
+                "slot_time": all_student_map.get(c.get("student_id"), {}).get("slot_time") or student_map.get(c.get("student_id"), {}).get("slot_time"),
+                "location": all_student_map.get(c.get("student_id"), {}).get("location") or student_map.get(c.get("student_id"), {}).get("location") or target_location,
             }
             for c in completed_classes[:100]
         ],
@@ -2227,8 +2316,6 @@ async def daily_report(
     target_loc = None
     if user.get("role") == "trainer":
         target_loc = user.get("location")
-    elif user.get("role") == "manager" and user.get("location"):
-        target_loc = user["location"]
     elif location:
         target_loc = location
 
@@ -2299,8 +2386,8 @@ async def get_notion_status(user: dict = Depends(get_current_user)):
 @api.post("/notion/config")
 async def save_notion_config(req: NotionConfigRequest, user: dict = Depends(get_current_user)):
     """Saves Notion Integration API Key & Database ID into MongoDB settings."""
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if user.get("role") not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
     clean_db = clean_database_id(req.database_id)
     await db.settings.update_one(
         {"key": "notion_sync"},
@@ -2319,8 +2406,8 @@ async def save_notion_config(req: NotionConfigRequest, user: dict = Depends(get_
 @api.post("/notion/sync-all")
 async def sync_all_to_notion(include_old: bool = False, user: dict = Depends(get_current_user)):
     """Pushes all students to Notion database."""
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if user.get("role") not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
     result = await asyncio.to_thread(sync_all_students_to_notion, include_old)
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error", "Notion sync failed"))
@@ -2347,8 +2434,8 @@ async def get_email_status(user: dict = Depends(get_current_user)):
     }
 
 @api.post("/email/test")
-async def send_test_email_endpoint(body: SendTestEmailRequest, user: dict = Depends(require_admin)):
-    """Send a diagnostic test email via Hostinger SMTP (Admin only)."""
+async def send_test_email_endpoint(body: SendTestEmailRequest, user: dict = Depends(require_manager_or_admin)):
+    """Send a diagnostic test email via Hostinger SMTP (Manager or Admin)."""
     html_content = f"""
     <div style="font-family: sans-serif; padding: 24px; border: 1px solid #e4e4e7; border-radius: 8px; max-width: 500px;">
       <h2 style="color: #16a34a; margin-top: 0;">Hostinger SMTP Connected!</h2>
@@ -2379,10 +2466,10 @@ async def get_marketing_status(user: dict = Depends(get_current_user)):
     return get_reach_summary()
 
 @api.post("/marketing/reach/sync-all")
-async def sync_all_contacts_to_reach(user: dict = Depends(require_admin)):
+async def sync_all_contacts_to_reach(user: dict = Depends(require_manager_or_admin)):
     """
     Sync all students and users with valid email addresses to Hostinger Reach
-    Email Marketing audience with appropriate tags (Admin only).
+    Email Marketing audience with appropriate tags (Manager or Admin).
     """
     # 1. Fetch all students with email
     students_cursor = db.students.find(
@@ -2422,12 +2509,12 @@ async def get_n8n_status(user: dict = Depends(get_current_user)):
     return {
         "configured": is_n8n_configured(),
         "subscription": "Hostinger AI automation apps",
-        "webhook_url": os.environ.get("N8N_WEBHOOK_URL", "") if user.get("role") == "admin" else "[Restricted]"
+        "webhook_url": os.environ.get("N8N_WEBHOOK_URL", "") if user.get("role") in ("admin", "manager") else "[Restricted]"
     }
 
 @api.post("/n8n/test")
-async def send_n8n_test(user: dict = Depends(require_admin)):
-    """Send a mock payment & invoice event to the Hostinger n8n instance (Admin only)."""
+async def send_n8n_test(user: dict = Depends(require_manager_or_admin)):
+    """Send a mock payment & invoice event to the Hostinger n8n instance (Manager or Admin)."""
     test_data = {
         "payment_id": str(uuid.uuid4()),
         "invoice_number": "INV-TEST-001",
@@ -2462,8 +2549,8 @@ async def get_google_sheet_setting(user: dict = Depends(get_current_user)):
 
 @api.post("/settings/google-sheet")
 async def save_google_sheet_setting(body: dict, user: dict = Depends(get_current_user)):
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    if user.get("role") not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Manager or Admin access required")
     url = body.get("webhook_url", "").strip()
     await db.settings.update_one(
         {"key": "google_sheet_webhook"},
@@ -2475,7 +2562,7 @@ async def save_google_sheet_setting(body: dict, user: dict = Depends(get_current
 
 
 @api.post("/settings/google-sheet/sync-all")
-async def trigger_google_sheet_sync_all(user: dict = Depends(require_admin)):
+async def trigger_google_sheet_sync_all(user: dict = Depends(require_manager_or_admin)):
     result = await asyncio.to_thread(sync_all_active_students_to_sheet)
     return result
 

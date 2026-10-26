@@ -111,7 +111,8 @@ export default function Dashboard() {
       const payload = { status };
       if (status === "completed") payload.completed_date = today;
       await api.patch(`/classes/${classId}`, payload);
-      toast.success(`Class ${num} for ${studentName} → ${status}`);
+      const label = status === "completed" ? "Present" : status === "absent" ? "Absent" : status;
+      toast.success(`Class ${num} for ${studentName} marked ${label}`);
       // Reload trainer schedule
       const sc = await api.get(`/schedule/today?date=${today}`);
       setTrainerSchedule(sc.data);
@@ -286,7 +287,7 @@ export default function Dashboard() {
                               <CopyButton text={session.phone} size={11} title={`Copy ${session.phone}`} />
                             </span>
                             {targetCls && (
-                              <span>· Class {targetCls.class_number}/{session.total_classes || 12} · Status: <span className="font-bold capitalize">{targetCls.status}</span></span>
+                              <span>· Class {targetCls.class_number}/{session.total_classes || 10} · Status: <span className="font-bold capitalize">{targetCls.status}</span></span>
                             )}
                           </div>
                         </div>
@@ -299,22 +300,22 @@ export default function Dashboard() {
                                 onClick={() => markStudentClass(targetCls.id, "completed", session.name, targetCls.class_number)}
                                 className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
                               >
-                                <CheckCircle size={12} weight="bold" /> Attended
+                                <CheckCircle size={12} weight="bold" /> Present
                               </button>
                               <button
-                                onClick={() => markStudentClass(targetCls.id, "missed", session.name, targetCls.class_number)}
+                                onClick={() => markStudentClass(targetCls.id, "absent", session.name, targetCls.class_number)}
                                 className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
                               >
-                                <XCircle size={12} weight="bold" /> Missed
+                                <XCircle size={12} weight="bold" /> Absent
                               </button>
                             </>
                           ) : (
                             <span className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1.5 font-bold uppercase tracking-wider border ${
                               targetCls?.status === "completed" ? "bg-emerald-50 text-emerald-800 border-emerald-200" :
-                              targetCls?.status === "missed" ? "bg-red-50 text-red-800 border-red-200" :
+                              (targetCls?.status === "absent" || targetCls?.status === "missed") ? "bg-red-50 text-red-800 border-red-200" :
                               "bg-zinc-100 text-zinc-500 border-zinc-200"
                             }`}>
-                              {targetCls?.status === "completed" ? "✓ Attended" : targetCls?.status === "missed" ? "✗ Missed" : "No Pending Today"}
+                              {targetCls?.status === "completed" ? "✓ Present" : (targetCls?.status === "absent" || targetCls?.status === "missed") ? "✗ Absent" : "No Pending Today"}
                             </span>
                           )}
                         </div>
@@ -375,7 +376,12 @@ export default function Dashboard() {
                     <div className="space-y-1">
                       <div className="flex justify-between text-[10px] text-zinc-500 font-mono-data">
                         <span>Class Progress</span>
-                        <span>{s.classes_completed}/{s.total_classes} completed</span>
+                        <span>
+                          {s.classes_completed}/{s.total_classes} completed
+                          {s.classes_absent > 0 && (
+                            <span className="text-red-600 font-bold ml-1">· {s.classes_absent} absent</span>
+                          )}
+                        </span>
                       </div>
                       <div className="w-full h-1.5 bg-zinc-100 relative">
                         <div

@@ -234,7 +234,7 @@ export default function TrainerDetail() {
               </div>
             </div>
             
-            {isAdmin && (
+            {isManagerOrAdmin && (
               <div>
                 {editing ? (
                   <div className="flex items-center gap-2">

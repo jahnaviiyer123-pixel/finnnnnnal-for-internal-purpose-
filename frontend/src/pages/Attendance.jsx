@@ -116,7 +116,8 @@ function StudentAttendance({ user, isAdmin }) {
       const payload = { status };
       if (status === "completed") payload.completed_date = date;
       await api.patch(`/classes/${classId}`, payload);
-      toast.success(`Class ${classNumber} for ${studentName} → ${status}`);
+      const label = status === "completed" ? "Present" : status === "absent" ? "Absent" : status;
+      toast.success(`Class ${classNumber} for ${studentName} marked ${label}`);
       // Re-fetch only that student's classes
       const studentId = Object.keys(classes).find((sid) =>
         classes[sid]?.some((c) => c.id === classId)
@@ -272,6 +273,9 @@ function StudentAttendance({ user, isAdmin }) {
                 const completed = studentClasses.filter(
                   (c) => c.status === "completed"
                 ).length;
+                const absentCount = studentClasses.filter(
+                  (c) => c.status === "absent" || c.status === "missed"
+                ).length;
                 const nextPending = studentClasses.find(
                   (c) => c.status === "pending"
                 );
@@ -279,7 +283,7 @@ function StudentAttendance({ user, isAdmin }) {
                 const todayClass = studentClasses.find(
                   (c) =>
                     c.completed_date === date ||
-                    (c.status === "missed" && c.updated_at && c.updated_at.startsWith(date))
+                    ((c.status === "absent" || c.status === "missed") && c.updated_at && c.updated_at.startsWith(date))
                 );
 
                 return (
@@ -328,6 +332,11 @@ function StudentAttendance({ user, isAdmin }) {
                           />
                         </span>
                       </div>
+                      {absentCount > 0 && (
+                        <div className="text-[10px] text-red-600 font-bold tracking-tight mt-0.5">
+                          {absentCount} absentee{absentCount > 1 ? "s" : ""}
+                        </div>
+                      )}
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-end gap-2">
@@ -340,8 +349,8 @@ function StudentAttendance({ user, isAdmin }) {
                             }`}
                           >
                             {todayClass.status === "completed"
-                              ? "✓ Attended"
-                              : "✗ Missed"}
+                              ? "✓ Present"
+                              : "✗ Absent"}
                             <span className="text-[9px] opacity-70 ml-1">
                               (Class {todayClass.class_number})
                             </span>
@@ -357,25 +366,24 @@ function StudentAttendance({ user, isAdmin }) {
                                   nextPending.class_number
                                 )
                               }
-                              data-testid={`mark-attended-${s.id}`}
+                              data-testid={`mark-present-${s.id}`}
                               className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
                             >
-                              <CheckCircle size={12} weight="bold" />{" "}
-                              Attended
+                              <CheckCircle size={12} weight="bold" /> Present
                             </button>
                             <button
                               onClick={() =>
                                 markClass(
                                   nextPending.id,
-                                  "missed",
+                                  "absent",
                                   s.name,
                                   nextPending.class_number
                                 )
                               }
-                              data-testid={`mark-missed-${s.id}`}
+                              data-testid={`mark-absent-${s.id}`}
                               className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
                             >
-                              <XCircle size={12} weight="bold" /> Missed
+                              <XCircle size={12} weight="bold" /> Absent
                             </button>
                             <span className="text-[9px] text-zinc-400 font-mono-data whitespace-nowrap">
                               Class {nextPending.class_number}
@@ -383,7 +391,7 @@ function StudentAttendance({ user, isAdmin }) {
                           </>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-1.5 font-bold uppercase tracking-wider border bg-zinc-100 text-zinc-500 border-zinc-200">
-                            All classes done
+                            Course Completed 🎉
                           </span>
                         )}
                       </div>

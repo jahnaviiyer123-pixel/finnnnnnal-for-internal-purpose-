@@ -22,6 +22,7 @@ import { toast } from "sonner";
 export default function StudentDetail() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isManagerOrAdmin = isAdmin || user?.role === "manager";
   const { id } = useParams();
   const navigate = useNavigate();
   const [student, setStudent] = useState(null);
@@ -104,6 +105,7 @@ export default function StudentDetail() {
   }
 
   const completedCount = classes.filter((c) => c.status === "completed").length;
+  const absentCount = classes.filter((c) => c.status === "absent" || c.status === "missed").length;
   const pending = (student.fees_total || 0) - (student.fees_paid || 0);
   const trainerName = (tid) => trainers.find((t) => t.id === tid)?.name || "—";
 
@@ -163,7 +165,7 @@ export default function StudentDetail() {
                 <FileText size={14} weight="bold" /> Admission Slip &amp; Bill
               </button>
 
-              {isAdmin && (
+              {isManagerOrAdmin && (
                 <>
                   {editing ? (
                     <>
@@ -283,7 +285,7 @@ export default function StudentDetail() {
             </div>
             <div>
               <div className="label-tag mb-1.5">Branch Location</div>
-              {editing && isAdmin ? (
+              {editing && isManagerOrAdmin ? (
                 <select
                   value={editForm.location || "Khajaguda"}
                   onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
@@ -325,8 +327,8 @@ export default function StudentDetail() {
                     type="number"
                     min="1"
                     max="50"
-                    value={editForm.total_classes ?? student.total_classes ?? 12}
-                    onChange={(e) => setEditForm({ ...editForm, total_classes: Number(e.target.value) || 12 })}
+                    value={editForm.total_classes ?? student.total_classes ?? 10}
+                    onChange={(e) => setEditForm({ ...editForm, total_classes: Number(e.target.value) || 10 })}
                     className="w-full border border-zinc-300 px-2 py-1.5 text-sm font-mono-data"
                   />
                 </div>
@@ -414,6 +416,19 @@ export default function StudentDetail() {
             {completedCount}<span className="text-zinc-300 text-4xl">/{student.total_classes}</span>
           </div>
           <div className="text-xs text-zinc-500 mt-2 font-mono-data">classes completed</div>
+          {absentCount > 0 && (
+            <div className="mt-3 pt-3 border-t border-zinc-200">
+              <div className="flex items-center justify-between">
+                <span className="label-tag text-red-600">Absentees recorded</span>
+                <span className="text-xs font-black font-mono-data text-red-700 bg-red-50 border border-red-200 px-2 py-0.5">
+                  {absentCount} day{absentCount > 1 ? "s" : ""}
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-1">
+                Compensatory classes added to schedule to guarantee 10 full working days course.
+              </p>
+            </div>
+          )}
 
           {isAdmin && (
             <div className="mt-6 pt-6 border-t border-zinc-200">
@@ -464,7 +479,7 @@ export default function StudentDetail() {
           </thead>
           <tbody>
             {classes.map((c) => (
-              <ClassRow key={c.id} cls={c} trainers={trainers} onSaved={load} isAdmin={isAdmin} />
+              <ClassRow key={c.id} cls={c} trainers={trainers} onSaved={load} isAdmin={isManagerOrAdmin} />
             ))}
           </tbody>
         </table>
@@ -534,17 +549,18 @@ function DetailField({ label, value, editing, editValue, onChange, copyable = fa
 
 function ClassBlock({ cls }) {
   const base = "aspect-square flex flex-col items-center justify-center border";
+  const isAbsent = cls.status === "absent" || cls.status === "missed";
   const style =
     cls.status === "completed"
       ? "bg-emerald-600 border-emerald-700 text-white"
-      : cls.status === "missed"
+      : isAbsent
       ? "bg-red-600 border-red-700 text-white"
       : "bg-zinc-50 border-zinc-200 text-zinc-400";
   return (
-    <div className={`${base} ${style}`} title={`Class ${cls.class_number} — ${cls.status}`}>
+    <div className={`${base} ${style}`} title={`Class ${cls.class_number} — ${cls.status === "completed" ? "Present" : isAbsent ? "Absent" : "Pending"}`}>
       <div className="font-heading font-black text-2xl leading-none">{cls.class_number}</div>
       <div className="text-[9px] uppercase tracking-wider mt-1 font-bold">
-        {cls.status === "completed" ? "✓" : cls.status === "missed" ? "✗" : "·"}
+        {cls.status === "completed" ? "✓" : isAbsent ? "✗" : "·"}
       </div>
     </div>
   );
@@ -582,17 +598,19 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
       const payload = { status };
       if (status === "completed") payload.completed_date = today;
       await api.patch(`/classes/${cls.id}`, payload);
-      toast.success(`Class ${cls.class_number} marked as ${status}`);
+      const label = status === "completed" ? "Present" : status === "absent" ? "Absent" : status;
+      toast.success(`Class ${cls.class_number} marked as ${label}`);
       onSaved();
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || e.message);
     }
   };
 
+  const isAbsent = cls.status === "absent" || cls.status === "missed";
   const icon =
     cls.status === "completed" ? (
       <CheckCircle weight="fill" className="text-emerald-600" size={18} />
-    ) : cls.status === "missed" ? (
+    ) : isAbsent ? (
       <XCircle weight="fill" className="text-red-600" size={18} />
     ) : (
       <Circle weight="bold" className="text-zinc-300" size={18} />
@@ -600,7 +618,12 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
 
   return (
     <tr className="border-b border-zinc-100 hover:bg-zinc-50" data-testid={`class-row-${cls.class_number}`}>
-      <td className="p-3 font-mono-data text-xs font-bold">{cls.class_number}</td>
+      <td className="p-3 font-mono-data text-xs font-bold">
+        {cls.class_number}
+        {cls.is_makeup && (
+          <span className="block text-[8px] uppercase tracking-wider text-purple-700 font-extrabold">Makeup</span>
+        )}
+      </td>
       <td className="p-3">
         {editing ? (
           <input type="date" value={f.completed_date} onChange={(e) => setF({ ...f, completed_date: e.target.value })} className="border border-zinc-300 px-2 py-1 text-xs" />
@@ -622,12 +645,12 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
         {editing ? (
           <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} className="border border-zinc-300 px-2 py-1 text-xs">
             <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-            <option value="missed">Missed</option>
+            <option value="completed">Present (Completed)</option>
+            <option value="absent">Absent</option>
           </select>
         ) : (
           <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider">
-            {icon} {cls.status}
+            {icon} {cls.status === "completed" ? "Present" : isAbsent ? "Absent" : cls.status}
           </div>
         )}
       </td>
@@ -643,17 +666,17 @@ function ClassRow({ cls, trainers, onSaved, isAdmin }) {
           <div className="flex items-center justify-end gap-1.5">
             <button
               onClick={() => quickMark("completed")}
-              data-testid={`quick-attended-${cls.class_number}`}
+              data-testid={`quick-present-${cls.class_number}`}
               className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1.5 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
-              <CheckCircle size={10} weight="bold" /> Attended
+              <CheckCircle size={10} weight="bold" /> Present
             </button>
             <button
-              onClick={() => quickMark("missed")}
-              data-testid={`quick-missed-${cls.class_number}`}
+              onClick={() => quickMark("absent")}
+              data-testid={`quick-absent-${cls.class_number}`}
               className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1.5 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
-              <XCircle size={10} weight="bold" /> Missed
+              <XCircle size={10} weight="bold" /> Absent
             </button>
             {isAdmin && (
               <>

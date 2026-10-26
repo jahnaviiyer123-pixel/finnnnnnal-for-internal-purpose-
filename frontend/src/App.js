@@ -16,6 +16,7 @@ import Payments from "@/pages/Payments";
 import Schedule from "@/pages/Schedule";
 import Slots from "@/pages/Slots";
 import Reports from "@/pages/Reports";
+import InvoicePage from "@/pages/InvoicePage";
 
 function AdminRoute({ children }) {
   const { user, ready } = useAuth();
@@ -56,6 +57,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/students/:id/invoice" element={<InvoicePage />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
@@ -67,7 +69,7 @@ function App() {
               <Route path="/attendance" element={<Attendance />} />
               <Route path="/reports" element={<ManagerOrAdminRoute><Reports /></ManagerOrAdminRoute>} />
               <Route path="/payments" element={<AdminRoute><Payments /></AdminRoute>} />
-              <Route path="/slots" element={<AdminRoute><Slots /></AdminRoute>} />
+              <Route path="/slots" element={<ManagerOrAdminRoute><Slots /></ManagerOrAdminRoute>} />
             </Route>
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

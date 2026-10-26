@@ -41,7 +41,7 @@ export function exportStudentsToCsv(students, filenamePrefix = "LearnAndDrive_St
   ];
 
   const rows = students.map((s) => {
-    const totalC = s.total_classes || 12;
+    const totalC = s.total_classes || 10;
     const completedC = s.classes_completed || 0;
     const remC = s.classes_remaining != null ? s.classes_remaining : Math.max(0, totalC - completedC);
     const feesTotal = s.fees_total || 0;
