@@ -49,7 +49,8 @@ export default function Dashboard() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locations, setLocations] = useState(["Khajaguda", "Attapur", "Madhapur"]);
-  const [selectedLocation, setSelectedLocation] = useState("");
+  // Managers only run the Khajaguda branch, so their dashboard is locked to it
+  const [selectedLocation, setSelectedLocation] = useState(isManager ? "Khajaguda" : "");
 
   const loadAdminData = async (loc = selectedLocation) => {
     const locParam = loc ? `?location=${encodeURIComponent(loc)}` : "";
@@ -420,6 +421,9 @@ export default function Dashboard() {
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-zinc-200 shadow-sm">
             <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Branch:</span>
+            {isManager ? (
+              <span className="text-xs font-bold text-zinc-900">{selectedLocation}</span>
+            ) : (
             <select
               value={selectedLocation}
               onChange={(e) => {
@@ -436,6 +440,7 @@ export default function Dashboard() {
                 </option>
               ))}
             </select>
+            )}
           </div>
           <div className="font-mono-data text-xs text-zinc-500">
             {new Date().toDateString().toUpperCase()}

@@ -1952,6 +1952,8 @@ async def dashboard_stats(location: Optional[str] = None, user: dict = Depends(g
     target_location = None
     if user.get("role") == "trainer":
         target_location = user.get("location")
+    elif user.get("role") == "manager":
+        target_location = MANAGER_BRANCH
     elif location:
         target_location = location
 
@@ -1975,8 +1977,12 @@ async def dashboard_stats(location: Optional[str] = None, user: dict = Depends(g
     total_students_task = db.students.count_documents(student_q)
     active_students_task = db.students.count_documents(active_student_q)
     total_trainers_task = db.users.count_documents(trainer_q)
-    classes_today_task = db.classes.count_documents({"completed_date": today, "status": "completed"})
-    
+    classes_today_q = {"completed_date": today, "status": "completed"}
+    if target_location:
+        loc_students = await db.students.find(student_q, {"id": 1, "_id": 0}).to_list(5000)
+        classes_today_q["student_id"] = {"$in": [s["id"] for s in loc_students if "id" in s]}
+    classes_today_task = db.classes.count_documents(classes_today_q)
+
     # Filter trainer attendance if location is selected
     if target_location:
         loc_trainers = await db.users.find(trainer_q, {"id": 1, "_id": 0}).to_list(500)
