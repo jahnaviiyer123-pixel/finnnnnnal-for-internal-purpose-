@@ -642,6 +642,33 @@ async def list_trainers(
     return trainers
 
 
+@api.get("/trainers/client-counts")
+async def trainer_client_counts(
+    month: Optional[str] = Query(None, description="YYYY-MM, defaults to current month"),
+    user: dict = Depends(require_manager_or_admin),
+):
+    """Distinct clients each trainer handled in a month: students assigned to the trainer with any class dated in that month."""
+    month = month or date.today().strftime("%Y-%m")
+    try:
+        datetime.strptime(month, "%Y-%m")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    # Dates are stored as YYYY-MM-DD strings, so "-31" safely bounds every month
+    s_date, e_date = f"{month}-01", f"{month}-31"
+    student_ids = await db.classes.distinct(
+        "student_id",
+        {"$or": [
+            {"scheduled_date": {"$gte": s_date, "$lte": e_date}},
+            {"completed_date": {"$gte": s_date, "$lte": e_date}},
+        ]},
+    )
+    rows = await db.students.aggregate([
+        {"$match": {"id": {"$in": student_ids}, "assigned_trainer_id": {"$nin": [None, ""]}}},
+        {"$group": {"_id": "$assigned_trainer_id", "count": {"$sum": 1}}},
+    ]).to_list(500)
+    return {"month": month, "counts": {r["_id"]: r["count"] for r in rows}}
+
+
 @api.post("/trainers")
 async def create_trainer(body: TrainerCreate, user: dict = Depends(require_manager_or_admin)):
     email = body.email.lower()

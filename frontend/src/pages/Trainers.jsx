@@ -23,6 +23,18 @@ function buildPhotoSrc(url) {
   return `${base}${url}${token ? `${sep}auth=${token}` : ""}`;
 }
 
+function lastTwelveMonths() {
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    return {
+      value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      label: d.toLocaleString("default", { month: "long", year: "numeric" }),
+    };
+  });
+}
+
 export default function Trainers() {
   const { user } = useAuth();
   const [active, setActive] = useState([]);
@@ -37,6 +49,18 @@ export default function Trainers() {
   const isManagerOrAdmin = isAdmin || isManager;
   const [selectedLocation, setSelectedLocation] = useState(isManagerOrAdmin ? "" : (user?.location || "Khajaguda"));
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", photo_url: null, location: user?.location || "Khajaguda" });
+  const monthOptions = lastTwelveMonths();
+  const [month, setMonth] = useState(monthOptions[0].value);
+  const [clientCounts, setClientCounts] = useState({});
+  const monthLabel = monthOptions.find((m) => m.value === month)?.label || month;
+
+  useEffect(() => {
+    if (!isManagerOrAdmin) return;
+    api
+      .get(`/trainers/client-counts?month=${month}`)
+      .then((res) => setClientCounts(res.data?.counts || {}))
+      .catch(() => setClientCounts({}));
+  }, [month, isManagerOrAdmin]);
 
   const load = async (loc = selectedLocation) => {
     const locParam = loc ? `&location=${loc}` : "";
@@ -177,6 +201,21 @@ export default function Trainers() {
             </div>
           )}
           {isManagerOrAdmin && (
+            <div className="flex items-center gap-2 bg-white border border-zinc-300 px-3 py-2">
+              <span className="label-tag text-[10px]">Month:</span>
+              <select
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="bg-transparent text-xs font-bold uppercase tracking-wider outline-none cursor-pointer"
+                data-testid="trainer-month-filter"
+              >
+                {monthOptions.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {isManagerOrAdmin && (
             <button
               onClick={openNew}
               data-testid="new-trainer-btn"
@@ -259,6 +298,14 @@ export default function Trainers() {
                 )}
               </div>
               <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4">
+                {isManagerOrAdmin && tab === "active" && (
+                  <div className="flex justify-between text-xs items-center" data-testid={`trainer-clients-${t.id}`}>
+                    <span className="label-tag">Clients · {monthLabel}</span>
+                    <span className="font-heading text-sm font-black text-blue-800 bg-blue-50 px-2.5 py-0.5 border border-blue-200">
+                      {clientCounts[t.id] || 0}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-xs items-center">
                   <span className="label-tag">Branch</span>
                   <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200">
