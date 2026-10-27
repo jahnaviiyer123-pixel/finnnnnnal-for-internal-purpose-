@@ -52,6 +52,11 @@ export default function Dashboard() {
   // Start on the branch picked in the sidebar instead of all branches
   const [selectedLocation, setSelectedLocation] = useState(user?.location || "");
 
+  // State for Trainer
+  const [trainerSchedule, setTrainerSchedule] = useState(null);
+  const [myAttendance, setMyAttendance] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
   const loadAdminData = async (loc = selectedLocation) => {
     const locParam = loc ? `?location=${encodeURIComponent(loc)}` : "";
     const [s, st] = await Promise.all([
