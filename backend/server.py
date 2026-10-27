@@ -1130,7 +1130,7 @@ async def get_student_invoice(student_id: str, user: dict = Depends(get_current_
     branch_addresses = {
         "Khajaguda": "Plot 42, Gachibowli-Khajaguda Main Road, Near Bio-Diversity Park, Hyderabad - 500075",
         "Madhapur": "Near Metro Station, Hitech City Main Road, Madhapur, Hyderabad - 500081",
-        "Attapur": "Main Road, Pillar No 143, Attapur, Hyderabad - 500048",
+        "Attapur": "Learn and Drive 2, Indram swimming pool, Nalanda Nagar, Attapur, Upperpally, Hyderabad, Telangana 500048",
     }
     branch_address = branch_addresses.get(branch_location, "Main Road, Hyderabad, Telangana")
 
