@@ -38,18 +38,6 @@ try:
         dispatch_n8n_event,
         is_n8n_configured
     )
-    from backend.google_sheets_service import (
-        sync_student_to_google_sheet,
-        sync_all_active_students_to_sheet,
-        is_sheets_sync_enabled
-    )
-    from backend.notion_service import (
-        sync_student_to_notion,
-        sync_all_students_to_notion,
-        get_notion_config,
-        is_notion_configured,
-        clean_database_id
-    )
 except ImportError:
     from email_service import (
         send_smtp_email,
@@ -65,18 +53,6 @@ except ImportError:
     from n8n_service import (
         dispatch_n8n_event,
         is_n8n_configured
-    )
-    from google_sheets_service import (
-        sync_student_to_google_sheet,
-        sync_all_active_students_to_sheet,
-        is_sheets_sync_enabled
-    )
-    from notion_service import (
-        sync_student_to_notion,
-        sync_all_students_to_notion,
-        get_notion_config,
-        is_notion_configured,
-        clean_database_id
     )
 
 
@@ -1080,18 +1056,8 @@ async def create_student(body: StudentCreate, user: dict = Depends(get_current_u
                 [{"name": doc.get("name"), "email": doc.get("email"), "phone": doc.get("phone")}],
                 "Student"
             ))
-
-        # 4. Sync student record to Google Sheets in parallel
-        trainer_name = "Unassigned"
-        if assigned_trainer:
-            tr_user = await db.users.find_one({"id": assigned_trainer}, {"name": 1})
-            if tr_user:
-                trainer_name = tr_user.get("name", "Unassigned")
-        asyncio.create_task(asyncio.to_thread(sync_student_to_google_sheet, dict(doc), trainer_name))
-        # 5. Sync student record to Notion in parallel
-        asyncio.create_task(asyncio.to_thread(sync_student_to_notion, dict(doc), trainer_name))
     except Exception as mail_err:
-        logger.warning("Non-blocking background email/marketing/sheets/n8n error for student %s: %s", sid, mail_err)
+        logger.warning("Non-blocking background email/marketing/n8n error for student %s: %s", sid, mail_err)
 
     doc.pop("_id", None)
     if user.get("role") != "admin":
@@ -2399,54 +2365,7 @@ async def export_archive_excel(user: dict = Depends(get_current_user)):
     )
 
 
-# ---------- Notion Database Integration API Endpoints ----------
 
-class NotionConfigRequest(BaseModel):
-    api_key: str
-    database_id: str
-
-@api.get("/notion/status")
-async def get_notion_status(user: dict = Depends(get_current_user)):
-    """Returns Notion connection status and masked credentials."""
-    cfg = get_notion_config()
-    api_key = cfg.get("api_key") or ""
-    db_id = cfg.get("database_id") or ""
-    masked_key = f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else ("Configured" if api_key else "")
-    return {
-        "configured": bool(api_key and db_id),
-        "api_key_masked": masked_key,
-        "database_id": db_id,
-    }
-
-@api.post("/notion/config")
-async def save_notion_config(req: NotionConfigRequest, user: dict = Depends(get_current_user)):
-    """Saves Notion Integration API Key & Database ID into MongoDB settings."""
-    if user.get("role") not in ("admin", "manager"):
-        raise HTTPException(status_code=403, detail="Manager or Admin access required")
-    clean_db = clean_database_id(req.database_id)
-    await db.settings.update_one(
-        {"key": "notion_sync"},
-        {
-            "$set": {
-                "key": "notion_sync",
-                "api_key": req.api_key.strip(),
-                "database_id": clean_db,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        },
-        upsert=True
-    )
-    return {"ok": True, "message": "Notion settings saved successfully", "database_id": clean_db}
-
-@api.post("/notion/sync-all")
-async def sync_all_to_notion(include_old: bool = False, user: dict = Depends(get_current_user)):
-    """Pushes all students to Notion database."""
-    if user.get("role") not in ("admin", "manager"):
-        raise HTTPException(status_code=403, detail="Manager or Admin access required")
-    result = await asyncio.to_thread(sync_all_students_to_notion, include_old)
-    if not result.get("ok"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Notion sync failed"))
-    return result
 
 
 
@@ -2569,37 +2488,7 @@ async def send_n8n_test(user: dict = Depends(require_manager_or_admin)):
 
 
 
-# ---------- Google Sheets Settings ----------
-@api.get("/settings/google-sheet")
-async def get_google_sheet_setting(user: dict = Depends(get_current_user)):
-    setting = await db.settings.find_one({"key": "google_sheet_webhook"})
-    url = setting.get("url", "") if setting else ""
-    if not url:
-        url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL", "")
-    return {
-        "configured": bool(url),
-        "webhook_url": url,
-    }
 
-
-@api.post("/settings/google-sheet")
-async def save_google_sheet_setting(body: dict, user: dict = Depends(get_current_user)):
-    if user.get("role") not in ("admin", "manager"):
-        raise HTTPException(status_code=403, detail="Manager or Admin access required")
-    url = body.get("webhook_url", "").strip()
-    await db.settings.update_one(
-        {"key": "google_sheet_webhook"},
-        {"$set": {"key": "google_sheet_webhook", "url": url}},
-        upsert=True
-    )
-    os.environ["GOOGLE_SHEET_WEBHOOK_URL"] = url
-    return {"ok": True, "webhook_url": url}
-
-
-@api.post("/settings/google-sheet/sync-all")
-async def trigger_google_sheet_sync_all(user: dict = Depends(require_manager_or_admin)):
-    result = await asyncio.to_thread(sync_all_active_students_to_sheet)
-    return result
 
 
 # Include router + middleware
